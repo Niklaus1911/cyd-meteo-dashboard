@@ -345,16 +345,17 @@ void formatDuration(char* buffer,
   if (includeHours && totalMinutes >= 60UL) {
     snprintf(buffer,
              bufferSize,
-             "%s %luh%02lum",
+             "%s %luh %02lum",
              prefix,
              static_cast<unsigned long>(totalMinutes / 60UL),
              static_cast<unsigned long>(totalMinutes % 60UL));
   } else if (totalMinutes > 0) {
     snprintf(buffer,
              bufferSize,
-             "%s %lum",
+             "%s %lum %02lus",
              prefix,
-             static_cast<unsigned long>(totalMinutes));
+             static_cast<unsigned long>(totalMinutes),
+             static_cast<unsigned long>(seconds));
   } else {
     snprintf(buffer, bufferSize, "%s %lus", prefix, static_cast<unsigned long>(seconds));
   }
@@ -395,20 +396,20 @@ void create(QueueHandle_t commandQueue) {
   s_confirmPage = createPage(screen);
   s_resettingPage = createPage(screen);
 
-  createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 82);
+  createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 88);
 
-  s_wifiBadge = createBadge(s_dashboardPage, 100, 5, 58);
-  s_mqttBadge = createBadge(s_dashboardPage, 164, 5, 70);
+  s_wifiBadge = createBadge(s_dashboardPage, 104, 5, 72);
+  s_mqttBadge = createBadge(s_dashboardPage, 182, 5, 94);
   s_gearButton = createButton(s_dashboardPage,
 #if defined(LV_SYMBOL_SETTINGS)
                               LV_SYMBOL_SETTINGS,
 #else
                               "SET",
 #endif
-                              288,
-                              2,
-                              30,
-                              30,
+                              280,
+                              0,
+                              40,
+                              38,
                               nullptr,
                               ColorPanel);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
@@ -475,8 +476,8 @@ void create(QueueHandle_t commandQueue) {
                          94);
   lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_RIGHT, 0);
 
-  setBadge(s_wifiBadge, "WIFI!", 0x233041, ColorMuted);
-  setBadge(s_mqttBadge, "MQTT!", 0x233041, ColorMuted);
+  setBadge(s_wifiBadge, "WiFi --", 0x233041, ColorMuted);
+  setBadge(s_mqttBadge, "MQTT --", 0x233041, ColorMuted);
   setBadge(s_statusBadge, "NO DATA", 0x233041, ColorMuted);
 
   createLabel(s_settingsPage, "Settings", &lv_font_montserrat_20, ColorText, 8, 10, 160);
@@ -533,12 +534,12 @@ void update(const AppState& state) {
   char buffer[80] = {};
 
   setBadge(s_wifiBadge,
-           state.wifiConnected ? "WIFI" : "WIFI!",
+           state.wifiConnected ? "WiFi OK" : "WiFi --",
            state.wifiConnected ? 0x1B6B3B : 0x4A2530,
            state.wifiConnected ? ColorText : ColorMuted);
 
   setBadge(s_mqttBadge,
-           state.mqttConnected ? "MQTT" : "MQTT!",
+           state.mqttConnected ? "MQTT OK" : "MQTT --",
            state.mqttConnected ? 0x1B6B3B : 0x4A2530,
            state.mqttConnected ? ColorText : ColorMuted);
 
