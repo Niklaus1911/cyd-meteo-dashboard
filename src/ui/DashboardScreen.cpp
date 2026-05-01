@@ -54,7 +54,6 @@ lv_obj_t* s_statusBadge = nullptr;
 lv_obj_t* s_age = nullptr;
 lv_obj_t* s_footer = nullptr;
 lv_obj_t* s_gearButton = nullptr;
-lv_obj_t* s_forecastButton = nullptr;
 
 lv_obj_t* s_settingsWifi = nullptr;
 lv_obj_t* s_settingsMqtt = nullptr;
@@ -333,6 +332,13 @@ void onForecastButton(lv_event_t* event) {
   }
 }
 
+void onForecastBackButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_RELEASED) {
+    showPage(Page::Settings);
+  }
+}
+
 void onBackButton(lv_event_t* event) {
   const lv_event_code_t code = lv_event_get_code(event);
   if (code == LV_EVENT_PRESSED) {
@@ -566,9 +572,6 @@ void create(QueueHandle_t commandQueue) {
   lv_obj_set_style_radius(s_battery.bar, 3, 0);
   lv_obj_set_style_radius(s_battery.bar, 3, LV_PART_INDICATOR);
 
-  s_forecastButton = createButton(s_dashboardPage, "FCST", 228, 194, 78, 28, onForecastButton, ColorPanelAlt);
-  lv_obj_move_foreground(s_forecastButton);
-
   s_footer = createLabel(s_dashboardPage,
                          "uptime --",
                          &lv_font_montserrat_12,
@@ -600,7 +603,8 @@ void create(QueueHandle_t commandQueue) {
   s_settingsLast = createLabel(s_settingsPage, "Last: --", &lv_font_montserrat_12, ColorMuted, 14, 142, 136);
   s_settingsExpected = createLabel(s_settingsPage, "Expect: 10m", &lv_font_montserrat_12, ColorMuted, 166, 142, 140);
   s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 164, 292);
-  createButton(s_settingsPage, "Reset WiFi/MQTT", 32, 184, 256, 48, onResetButton, 0x243246);
+  createButton(s_settingsPage, "Forecast", 32, 178, 120, 48, onForecastButton, ColorPanelAlt);
+  createButton(s_settingsPage, "Reset WiFi/MQTT", 164, 178, 124, 48, onResetButton, 0x243246);
 
   createLabel(s_confirmPage,
               "Erase saved WiFi and MQTT settings?",
@@ -637,13 +641,15 @@ void create(QueueHandle_t commandQueue) {
   lv_obj_set_style_text_align(s_resettingDetail, LV_TEXT_ALIGN_CENTER, 0);
 
   createLabel(s_forecastPage, "Forecast", &lv_font_montserrat_20, ColorText, 8, 10, 160);
-  createButton(s_forecastPage, "BACK", 220, 8, 92, 40, onBackButton, ColorPanel);
+  createButton(s_forecastPage, "BACK", 220, 8, 92, 40, onForecastBackButton, ColorPanel);
 
   s_forecastContent = lv_obj_create(s_forecastPage);
   lv_obj_set_pos(s_forecastContent, 0, 50);
   lv_obj_set_size(s_forecastContent, 320, 190);
   lv_obj_set_scroll_dir(s_forecastContent, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(s_forecastContent, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_add_flag(s_forecastContent, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+  lv_obj_add_flag(s_forecastContent, LV_OBJ_FLAG_SCROLL_ELASTIC);
   lv_obj_set_style_bg_color(s_forecastContent, lv_color_hex(ColorBg), 0);
   lv_obj_set_style_bg_opa(s_forecastContent, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(s_forecastContent, 0, 0);
