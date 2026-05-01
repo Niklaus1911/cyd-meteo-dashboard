@@ -27,6 +27,7 @@ constexpr uint32_t ColorText = 0xF4F7FB;
 constexpr uint32_t ColorMuted = 0x93A4B8;
 constexpr uint32_t ColorGreen = 0x38D07A;
 constexpr uint32_t ColorRed = 0xE35D6A;
+constexpr uint32_t ColorDestructive = 0x6A1F2A;
 constexpr uint32_t ColorAmber = 0xF4B740;
 constexpr uint32_t ColorBlue = 0x4DA3FF;
 constexpr uint32_t ColorCyan = 0x37D5D6;
@@ -604,7 +605,7 @@ void create(QueueHandle_t commandQueue) {
   s_settingsExpected = createLabel(s_settingsPage, "Expect: 10m", &lv_font_montserrat_12, ColorMuted, 166, 142, 140);
   s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 164, 292);
   createButton(s_settingsPage, "Forecast", 32, 178, 120, 48, onForecastButton, ColorPanelAlt);
-  createButton(s_settingsPage, "Reset WiFi/MQTT", 164, 178, 124, 48, onResetButton, 0x243246);
+  createButton(s_settingsPage, "Reset WiFi/MQTT", 164, 178, 124, 48, onResetButton, ColorDestructive);
 
   createLabel(s_confirmPage,
               "Erase saved WiFi and MQTT settings?",
@@ -621,7 +622,7 @@ void create(QueueHandle_t commandQueue) {
               92,
               252);
   createButton(s_confirmPage, "Cancel", 28, 150, 120, 52, onCancelButton, ColorPanel);
-  s_eraseButton = createButton(s_confirmPage, "Erase", 172, 150, 120, 52, onEraseButton, 0x5A2530);
+  s_eraseButton = createButton(s_confirmPage, "Erase", 172, 150, 120, 52, onEraseButton, ColorDestructive);
 
   s_resettingTitle = createLabel(s_resettingPage,
                                  "Resetting...",
