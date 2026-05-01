@@ -40,7 +40,7 @@ namespace MqttSettingsStore {
 
 bool load(MqttSettings& settings) {
   Preferences preferences;
-  if (!preferences.begin(Namespace, true)) {
+  if (!preferences.begin(Namespace, false)) {
     return false;
   }
 

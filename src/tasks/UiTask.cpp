@@ -14,10 +14,37 @@ namespace {
 EventGroupHandle_t s_systemEvents = nullptr;
 QueueHandle_t s_commandQueue = nullptr;
 
+uint32_t s_lastStackLogMs = 0;
+
+void logStackHighWaterMark(uint32_t nowMs) {
+  if (nowMs - s_lastStackLogMs < AppConfig::StackLogPeriodMs) {
+    return;
+  }
+
+  s_lastStackLogMs = nowMs;
+
+  const UBaseType_t highWaterWords = uxTaskGetStackHighWaterMark(nullptr);
+  const uint32_t highWaterBytes = highWaterWords * sizeof(StackType_t);
+  LOG_TASK("stack high-water free=%lu bytes (%lu words)",
+           static_cast<unsigned long>(highWaterBytes),
+           static_cast<unsigned long>(highWaterWords));
+}
+
+void logStackHighWaterMarkNow(const char* context) {
+  const UBaseType_t highWaterWords = uxTaskGetStackHighWaterMark(nullptr);
+  const uint32_t highWaterBytes = highWaterWords * sizeof(StackType_t);
+  LOG_TASK("stack high-water %s free=%lu bytes (%lu words)",
+           context,
+           static_cast<unsigned long>(highWaterBytes),
+           static_cast<unsigned long>(highWaterWords));
+}
+
 void uiTaskMain(void*) {
   LOG_TASK("started");
+  logStackHighWaterMarkNow("at start");
   LvglPort::begin();
   DashboardScreen::create();
+  logStackHighWaterMarkNow("after LVGL init");
 
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t lastStatusLogMs = 0;
@@ -46,6 +73,7 @@ void uiTaskMain(void*) {
 
     LvglPort::tick();
     LvglPort::handleTimers();
+    logStackHighWaterMark(nowMs);
 
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(AppConfig::UiLoopPeriodMs));
   }
@@ -62,7 +90,7 @@ bool startUiTask(EventGroupHandle_t systemEvents, QueueHandle_t commandQueue) {
   const BaseType_t result = xTaskCreatePinnedToCore(
       uiTaskMain,
       AppConfig::UiTaskName,
-      AppConfig::UiTaskStackWords,
+      AppConfig::UiTaskStackBytes,
       nullptr,
       AppConfig::UiTaskPriority,
       nullptr,

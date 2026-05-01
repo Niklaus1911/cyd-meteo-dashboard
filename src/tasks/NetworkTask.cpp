@@ -25,14 +25,20 @@ QueueHandle_t s_mqttInboundQueue = nullptr;
 WiFiClient s_wifiClient;
 PubSubClient s_mqttClient(s_wifiClient);
 MqttSettings s_mqttSettings;
+MqttInboundMessage s_callbackMessage;
+MqttInboundMessage s_processingMessage;
 
 uint32_t s_lastWifiAttemptMs = 0;
 uint32_t s_lastMqttAttemptMs = 0;
 uint32_t s_lastIncompleteMqttLogMs = 0;
 uint32_t s_lastDiagnosticLogMs = 0;
+uint32_t s_lastStackLogMs = 0;
 bool s_wifiWasConnected = false;
 bool s_mqttWasConnected = false;
 bool s_saveMqttSettingsRequested = false;
+char s_mqttPortText[8] = {};
+
+void logStackHighWaterMarkNow(const char* context);
 
 void copyString(char* destination, size_t destinationSize, const char* source) {
   if (destinationSize == 0) {
@@ -120,17 +126,16 @@ void mqttCallback(char* topic, uint8_t* payload, unsigned int length) {
     return;
   }
 
-  MqttInboundMessage message;
-  copyString(message.topic, sizeof(message.topic), topic);
+  copyString(s_callbackMessage.topic, sizeof(s_callbackMessage.topic), topic);
 
-  const uint32_t copyLength = min<uint32_t>(length, sizeof(message.payload) - 1);
-  memcpy(message.payload, payload, copyLength);
-  message.payload[copyLength] = '\0';
-  message.payloadLength = copyLength;
-  message.receivedAtMs = millis();
+  const uint32_t copyLength = min<uint32_t>(length, sizeof(s_callbackMessage.payload) - 1);
+  memcpy(s_callbackMessage.payload, payload, copyLength);
+  s_callbackMessage.payload[copyLength] = '\0';
+  s_callbackMessage.payloadLength = copyLength;
+  s_callbackMessage.receivedAtMs = millis();
 
-  if (xQueueSend(s_mqttInboundQueue, &message, 0) != pdTRUE) {
-    LOG_TASK("MQTT inbound queue full; dropped topic='%s'", message.topic);
+  if (xQueueSend(s_mqttInboundQueue, &s_callbackMessage, 0) != pdTRUE) {
+    LOG_TASK("MQTT inbound queue full; dropped topic='%s'", s_callbackMessage.topic);
   }
 }
 
@@ -163,53 +168,73 @@ void readPortalSettings(WiFiManagerParameter& host,
 bool runWiFiManager(uint32_t nowMs) {
   s_lastWifiAttemptMs = nowMs;
 
-  char mqttPort[8] = {};
-  snprintf(mqttPort, sizeof(mqttPort), "%u", s_mqttSettings.port);
+  snprintf(s_mqttPortText, sizeof(s_mqttPortText), "%u", s_mqttSettings.port);
 
-  WiFiManagerParameter mqttHost("mqtt_host",
-                                "MQTT Broker",
-                                s_mqttSettings.host,
-                                sizeof(s_mqttSettings.host));
-  WiFiManagerParameter mqttPortParam("mqtt_port",
-                                     "MQTT Port",
-                                     mqttPort,
-                                     sizeof(mqttPort));
-  WiFiManagerParameter mqttUser("mqtt_user",
-                                "MQTT Username",
-                                s_mqttSettings.username,
-                                sizeof(s_mqttSettings.username));
-  WiFiManagerParameter mqttPass("mqtt_pass",
-                                "MQTT Password",
-                                s_mqttSettings.password,
-                                sizeof(s_mqttSettings.password),
-                                "type=\"password\"");
-  WiFiManagerParameter mqttTopic("mqtt_topic",
-                                 "Telemetry Topic",
-                                 s_mqttSettings.telemetryTopic,
-                                 sizeof(s_mqttSettings.telemetryTopic));
+  WiFiManager* wifiManager = new WiFiManager();
+  WiFiManagerParameter* mqttHost = new WiFiManagerParameter("mqtt_host",
+                                                            "MQTT Broker",
+                                                            s_mqttSettings.host,
+                                                            sizeof(s_mqttSettings.host));
+  WiFiManagerParameter* mqttPortParam = new WiFiManagerParameter("mqtt_port",
+                                                                 "MQTT Port",
+                                                                 s_mqttPortText,
+                                                                 sizeof(s_mqttPortText));
+  WiFiManagerParameter* mqttUser = new WiFiManagerParameter("mqtt_user",
+                                                            "MQTT Username",
+                                                            s_mqttSettings.username,
+                                                            sizeof(s_mqttSettings.username));
+  WiFiManagerParameter* mqttPass = new WiFiManagerParameter("mqtt_pass",
+                                                            "MQTT Password",
+                                                            s_mqttSettings.password,
+                                                            sizeof(s_mqttSettings.password),
+                                                            "type=\"password\"");
+  WiFiManagerParameter* mqttTopic = new WiFiManagerParameter("mqtt_topic",
+                                                             "Telemetry Topic",
+                                                             s_mqttSettings.telemetryTopic,
+                                                             sizeof(s_mqttSettings.telemetryTopic));
+
+  if (wifiManager == nullptr || mqttHost == nullptr || mqttPortParam == nullptr ||
+      mqttUser == nullptr || mqttPass == nullptr || mqttTopic == nullptr) {
+    LOG_TASK("failed to allocate WiFiManager portal objects");
+    delete wifiManager;
+    delete mqttHost;
+    delete mqttPortParam;
+    delete mqttUser;
+    delete mqttPass;
+    delete mqttTopic;
+    return false;
+  }
 
   s_saveMqttSettingsRequested = false;
 
-  WiFiManager wifiManager;
-  wifiManager.setDebugOutput(false);
-  wifiManager.setConfigPortalTimeout(AppConfig::WifiManagerPortalTimeoutSec);
-  wifiManager.setConnectTimeout(20);
-  wifiManager.setSaveConfigCallback(onWiFiManagerSaveConfig);
-  wifiManager.setAPCallback(onWiFiManagerConfigMode);
-  wifiManager.addParameter(&mqttHost);
-  wifiManager.addParameter(&mqttPortParam);
-  wifiManager.addParameter(&mqttUser);
-  wifiManager.addParameter(&mqttPass);
-  wifiManager.addParameter(&mqttTopic);
+  wifiManager->setDebugOutput(false);
+  wifiManager->setConfigPortalTimeout(AppConfig::WifiManagerPortalTimeoutSec);
+  wifiManager->setConnectTimeout(20);
+  wifiManager->setSaveConfigCallback(onWiFiManagerSaveConfig);
+  wifiManager->setAPCallback(onWiFiManagerConfigMode);
+  wifiManager->addParameter(mqttHost);
+  wifiManager->addParameter(mqttPortParam);
+  wifiManager->addParameter(mqttUser);
+  wifiManager->addParameter(mqttPass);
+  wifiManager->addParameter(mqttTopic);
 
   LOG_TASK("starting WiFiManager auto-connect portal='%s'",
            AppConfig::WifiManagerPortalSsid);
+  logStackHighWaterMarkNow("before WiFiManager portal");
 
-  const bool connected = wifiManager.autoConnect(AppConfig::WifiManagerPortalSsid);
+  const bool connected = wifiManager->autoConnect(AppConfig::WifiManagerPortalSsid);
 
   LOG_TASK("WiFiManager portal ended connected=%d", connected);
+  logStackHighWaterMarkNow("after WiFiManager portal");
 
-  readPortalSettings(mqttHost, mqttPortParam, mqttUser, mqttPass, mqttTopic);
+  readPortalSettings(*mqttHost, *mqttPortParam, *mqttUser, *mqttPass, *mqttTopic);
+
+  delete wifiManager;
+  delete mqttHost;
+  delete mqttPortParam;
+  delete mqttUser;
+  delete mqttPass;
+  delete mqttTopic;
 
   if (s_saveMqttSettingsRequested) {
     if (MqttSettingsStore::save(s_mqttSettings)) {
@@ -441,9 +466,8 @@ void processInboundMqtt() {
     return;
   }
 
-  MqttInboundMessage message;
-  while (xQueueReceive(s_mqttInboundQueue, &message, 0) == pdTRUE) {
-    parseTelemetryMessage(message);
+  while (xQueueReceive(s_mqttInboundQueue, &s_processingMessage, 0) == pdTRUE) {
+    parseTelemetryMessage(s_processingMessage);
   }
 }
 
@@ -490,6 +514,29 @@ void logRuntimeDiagnostics(uint32_t nowMs) {
            static_cast<unsigned long>(uptimeMs));
 }
 
+void logStackHighWaterMark(uint32_t nowMs) {
+  if (nowMs - s_lastStackLogMs < AppConfig::StackLogPeriodMs) {
+    return;
+  }
+
+  s_lastStackLogMs = nowMs;
+
+  const UBaseType_t highWaterWords = uxTaskGetStackHighWaterMark(nullptr);
+  const uint32_t highWaterBytes = highWaterWords * sizeof(StackType_t);
+  LOG_TASK("stack high-water free=%lu bytes (%lu words)",
+           static_cast<unsigned long>(highWaterBytes),
+           static_cast<unsigned long>(highWaterWords));
+}
+
+void logStackHighWaterMarkNow(const char* context) {
+  const UBaseType_t highWaterWords = uxTaskGetStackHighWaterMark(nullptr);
+  const uint32_t highWaterBytes = highWaterWords * sizeof(StackType_t);
+  LOG_TASK("stack high-water %s free=%lu bytes (%lu words)",
+           context,
+           static_cast<unsigned long>(highWaterBytes),
+           static_cast<unsigned long>(highWaterWords));
+}
+
 void drainCommandQueue() {
   if (s_commandQueue == nullptr) {
     return;
@@ -503,12 +550,13 @@ void drainCommandQueue() {
 
 void networkTaskMain(void*) {
   LOG_TASK("started");
+  logStackHighWaterMarkNow("at start");
 
   if (MqttSettingsStore::load(s_mqttSettings)) {
     LOG_TASK("loaded MQTT settings from NVS");
     logMqttSettings("loaded");
   } else {
-    LOG_TASK("failed to load MQTT settings from NVS; using defaults");
+    LOG_TASK("MQTT settings unavailable; using defaults");
     logMqttSettings("default");
   }
 
@@ -540,6 +588,7 @@ void networkTaskMain(void*) {
     updateTelemetryStaleState(nowMs);
     drainCommandQueue();
     logRuntimeDiagnostics(nowMs);
+    logStackHighWaterMark(nowMs);
 
     if (nowMs - lastStatusLogMs >= AppConfig::StatusLogPeriodMs) {
       lastStatusLogMs = nowMs;
@@ -562,7 +611,7 @@ bool startNetworkTask(EventGroupHandle_t systemEvents,
   const BaseType_t result = xTaskCreatePinnedToCore(
       networkTaskMain,
       AppConfig::NetworkTaskName,
-      AppConfig::NetworkTaskStackWords,
+      AppConfig::NetworkTaskStackBytes,
       nullptr,
       AppConfig::NetworkTaskPriority,
       nullptr,
