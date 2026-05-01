@@ -39,7 +39,12 @@ void setup() {
     haltBoot("failed to create command queue");
   }
 
-  if (!startNetworkTask(g_systemEvents, g_commandQueue)) {
+  g_mqttInboundQueue = xQueueCreate(AppConfig::MqttInboundQueueLength, sizeof(MqttInboundMessage));
+  if (g_mqttInboundQueue == nullptr) {
+    haltBoot("failed to create MQTT inbound queue");
+  }
+
+  if (!startNetworkTask(g_systemEvents, g_commandQueue, g_mqttInboundQueue)) {
     haltBoot("failed to start NetworkTask");
   }
 

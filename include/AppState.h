@@ -4,6 +4,7 @@
 
 struct SensorTelemetry {
   bool valid = false;
+  bool stale = true;
   char source[32] = {};
   float temperatureC = NAN;
   float humidityPct = NAN;
@@ -22,5 +23,6 @@ struct AppState {
 
   SensorTelemetry latestSensor = {};
   uint32_t lastTelemetryUpdateMs = 0;
+  uint32_t lastMqttReceiveMs = 0;
   uint32_t uptimeMs = 0;
 };

@@ -93,7 +93,38 @@ bool updateTelemetry(const SensorTelemetry& telemetry,
 
   s_state.latestSensor = telemetry;
   s_state.latestSensor.valid = true;
+  s_state.latestSensor.stale = false;
   s_state.lastTelemetryUpdateMs = updateMs;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
+bool setTelemetryStale(bool stale, TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  s_state.latestSensor.stale = stale;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
+bool recordMqttReceive(uint32_t receiveMs, TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  s_state.lastMqttReceiveMs = receiveMs;
 
   xSemaphoreGive(s_mutex);
   return true;

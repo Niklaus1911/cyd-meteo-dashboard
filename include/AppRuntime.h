@@ -6,3 +6,4 @@
 
 extern EventGroupHandle_t g_systemEvents;
 extern QueueHandle_t g_commandQueue;
+extern QueueHandle_t g_mqttInboundQueue;
