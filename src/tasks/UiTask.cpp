@@ -6,6 +6,7 @@
 #include "AppQueues.h"
 #include "Log.h"
 #include "app/AppStateStore.h"
+#include "display/DisplayDiagnostic.h"
 
 namespace {
 
@@ -14,9 +15,11 @@ QueueHandle_t s_commandQueue = nullptr;
 
 void uiTaskMain(void*) {
   LOG_TASK("started");
+  DisplayDiagnostic::begin();
 
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t lastStatusLogMs = 0;
+  uint32_t lastDisplayConfigLogMs = 0;
 
   for (;;) {
     const uint32_t nowMs = millis();
@@ -29,6 +32,11 @@ void uiTaskMain(void*) {
                snapshot.mqttConnected,
                snapshot.latestSensor.valid,
                static_cast<unsigned long>(snapshot.uptimeMs));
+    }
+
+    if (nowMs - lastDisplayConfigLogMs >= AppConfig::DiagnosticLogPeriodMs) {
+      lastDisplayConfigLogMs = nowMs;
+      DisplayDiagnostic::logConfig();
     }
 
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(AppConfig::UiLoopPeriodMs));
