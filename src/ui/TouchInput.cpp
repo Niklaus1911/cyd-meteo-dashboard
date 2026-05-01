@@ -55,16 +55,24 @@ lv_point_t mapTouchPoint(const TS_Point& rawPoint) {
   }
 
   lv_point_t point;
-  point.x = mapAxis(rawX,
-                    TouchConfig::RawMinX,
-                    TouchConfig::RawMaxX,
-                    s_screenWidth,
-                    TouchConfig::InvertX);
-  point.y = mapAxis(rawY,
-                    TouchConfig::RawMinY,
-                    TouchConfig::RawMaxY,
-                    s_screenHeight,
-                    TouchConfig::InvertY);
+  const int32_t maxX = static_cast<int32_t>(s_screenWidth) - 1;
+  const int32_t maxY = static_cast<int32_t>(s_screenHeight) - 1;
+  point.x = constrain(mapAxis(rawX,
+                              TouchConfig::RawMinX,
+                              TouchConfig::RawMaxX,
+                              s_screenWidth,
+                              TouchConfig::InvertX) +
+                          TouchConfig::OffsetX,
+                      0,
+                      maxX);
+  point.y = constrain(mapAxis(rawY,
+                              TouchConfig::RawMinY,
+                              TouchConfig::RawMaxY,
+                              s_screenHeight,
+                              TouchConfig::InvertY) +
+                          TouchConfig::OffsetY,
+                      0,
+                      maxY);
   return point;
 }
 

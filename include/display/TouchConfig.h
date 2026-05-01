@@ -29,6 +29,12 @@ constexpr bool SwapXY = false;
 constexpr bool InvertX = false;
 constexpr bool InvertY = false;
 
+// Applied after raw calibration. If you must press left of a visible button,
+// decrease OffsetX; if you must press right, increase it. If you must press
+// below a button, increase OffsetY; if you must press above, decrease it.
+constexpr int16_t OffsetX = -12;
+constexpr int16_t OffsetY = 12;
+
 constexpr uint16_t MinPressure = 200;
 constexpr uint8_t SampleCount = 3;
 

@@ -345,17 +345,16 @@ void formatDuration(char* buffer,
   if (includeHours && totalMinutes >= 60UL) {
     snprintf(buffer,
              bufferSize,
-             "%s %luh %02lum",
+             "%s %luh%02lum",
              prefix,
              static_cast<unsigned long>(totalMinutes / 60UL),
              static_cast<unsigned long>(totalMinutes % 60UL));
   } else if (totalMinutes > 0) {
     snprintf(buffer,
              bufferSize,
-             "%s %lum %02lus",
+             "%s %lum",
              prefix,
-             static_cast<unsigned long>(totalMinutes),
-             static_cast<unsigned long>(seconds));
+             static_cast<unsigned long>(totalMinutes));
   } else {
     snprintf(buffer, bufferSize, "%s %lus", prefix, static_cast<unsigned long>(seconds));
   }
@@ -398,8 +397,8 @@ void create(QueueHandle_t commandQueue) {
 
   createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 82);
 
-  s_wifiBadge = createBadge(s_dashboardPage, 98, 5, 72);
-  s_mqttBadge = createBadge(s_dashboardPage, 176, 5, 104);
+  s_wifiBadge = createBadge(s_dashboardPage, 100, 5, 58);
+  s_mqttBadge = createBadge(s_dashboardPage, 164, 5, 70);
   s_gearButton = createButton(s_dashboardPage,
 #if defined(LV_SYMBOL_SETTINGS)
                               LV_SYMBOL_SETTINGS,
@@ -476,8 +475,8 @@ void create(QueueHandle_t commandQueue) {
                          94);
   lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_RIGHT, 0);
 
-  setBadge(s_wifiBadge, "WiFi --", 0x233041, ColorMuted);
-  setBadge(s_mqttBadge, "MQTT --", 0x233041, ColorMuted);
+  setBadge(s_wifiBadge, "WIFI!", 0x233041, ColorMuted);
+  setBadge(s_mqttBadge, "MQTT!", 0x233041, ColorMuted);
   setBadge(s_statusBadge, "NO DATA", 0x233041, ColorMuted);
 
   createLabel(s_settingsPage, "Settings", &lv_font_montserrat_20, ColorText, 8, 10, 160);
@@ -534,12 +533,12 @@ void update(const AppState& state) {
   char buffer[80] = {};
 
   setBadge(s_wifiBadge,
-           state.wifiConnected ? "WiFi OK" : "WiFi --",
+           state.wifiConnected ? "WIFI" : "WIFI!",
            state.wifiConnected ? 0x1B6B3B : 0x4A2530,
            state.wifiConnected ? ColorText : ColorMuted);
 
   setBadge(s_mqttBadge,
-           state.mqttConnected ? "MQTT OK" : "MQTT --",
+           state.mqttConnected ? "MQTT" : "MQTT!",
            state.mqttConnected ? 0x1B6B3B : 0x4A2530,
            state.mqttConnected ? ColorText : ColorMuted);
 
