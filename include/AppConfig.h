@@ -21,6 +21,7 @@ constexpr uint32_t UiTaskStackWords = 4096;
 constexpr uint32_t NetworkLoopPeriodMs = 250;
 constexpr uint32_t UiLoopPeriodMs = 100;
 constexpr uint32_t StatusLogPeriodMs = 5000;
+constexpr uint32_t DiagnosticLogPeriodMs = 30000;
 
 constexpr uint8_t CommandQueueLength = 8;
 constexpr uint8_t MqttInboundQueueLength = 6;
@@ -35,6 +36,13 @@ constexpr uint32_t TelemetryStaleAfterMs = 60000;
 constexpr uint32_t WifiManagerPortalTimeoutSec = 180;
 constexpr uint32_t MqttSocketTimeoutSec = 2;
 constexpr uint32_t MqttKeepAliveSec = 30;
+
+// Placeholder: set this to the real CYD button/touch GPIO once the board input is chosen.
+constexpr int ConfigResetButtonPin = -1;
+constexpr bool ConfigResetButtonActiveLow = true;
+constexpr uint32_t ConfigResetHoldMs = 5000;
+constexpr uint32_t ConfigResetSampleMs = 50;
+constexpr uint32_t RestartAfterConfigResetMs = 1000;
 
 constexpr size_t MqttTopicMaxLength = 96;
 constexpr size_t MqttPayloadMaxLength = 512;

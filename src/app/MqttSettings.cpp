@@ -70,4 +70,15 @@ bool save(const MqttSettings& settings) {
   return true;
 }
 
+bool clear() {
+  Preferences preferences;
+  if (!preferences.begin(Namespace, false)) {
+    return false;
+  }
+
+  const bool ok = preferences.clear();
+  preferences.end();
+  return ok;
+}
+
 }  // namespace MqttSettingsStore

@@ -19,5 +19,6 @@ namespace MqttSettingsStore {
 
 bool load(MqttSettings& settings);
 bool save(const MqttSettings& settings);
+bool clear();
 
 }  // namespace MqttSettingsStore
