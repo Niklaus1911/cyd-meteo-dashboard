@@ -207,21 +207,21 @@ void create() {
 
   s_wifiBadge = createBadge(screen, 128, 5, 84);
   s_mqttBadge = createBadge(screen, 220, 5, 92);
-  s_statusBadge = createBadge(screen, 8, 30, 76);
+  s_statusBadge = createBadge(screen, 8, 29, 76);
 
   s_age = createLabel(screen,
                       "age --",
                       &lv_font_montserrat_12,
                       ColorMuted,
-                      92,
-                      34,
-                      124);
+                      94,
+                      33,
+                      116);
 
   s_temperature = createMetricCard(screen, "TEMP", 8, 53, 118, 68, true, false, ColorCyan);
   s_humidity = createMetricCard(screen, "HUMID", 132, 53, 82, 68, false, false, ColorBlue);
   s_pressure = createMetricCard(screen, "PRESS", 220, 53, 92, 68, false, false, ColorPurple);
-  s_solar = createMetricCard(screen, "SOLAR", 8, 128, 190, 104, false, false, ColorAmber);
-  s_battery = createMetricCard(screen, "BATTERY", 204, 128, 108, 104, false, false, ColorGreen);
+  s_solar = createMetricCard(screen, "SOLAR", 8, 130, 190, 96, false, false, ColorAmber);
+  s_battery = createMetricCard(screen, "BATTERY", 204, 130, 108, 96, false, false, ColorGreen);
 
   lv_obj_set_width(s_temperature.value, 102);
   lv_obj_set_pos(s_temperature.value, CardPad, 28);
@@ -237,20 +237,20 @@ void create() {
   lv_obj_set_pos(s_pressure.detail, CardPad, 52);
 
   lv_obj_set_width(s_solar.value, 174);
-  lv_obj_set_pos(s_solar.value, CardPad, 34);
+  lv_obj_set_pos(s_solar.value, CardPad, 31);
   lv_obj_set_style_text_font(s_solar.value, &lv_font_montserrat_20, 0);
-  lv_obj_set_pos(s_solar.detail, CardPad, 66);
+  lv_obj_set_pos(s_solar.detail, CardPad, 61);
   lv_obj_set_width(s_solar.detail, 174);
   lv_obj_set_style_text_font(s_solar.detail, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(s_solar.detail, lv_color_hex(ColorAmber), 0);
 
-  lv_obj_set_pos(s_battery.value, CardPad, 35);
+  lv_obj_set_pos(s_battery.value, CardPad, 32);
   lv_obj_set_width(s_battery.value, 92);
-  lv_obj_set_pos(s_battery.detail, CardPad, 78);
+  lv_obj_set_pos(s_battery.detail, CardPad, 74);
   lv_obj_set_width(s_battery.detail, 92);
 
   s_battery.bar = lv_bar_create(s_battery.card);
-  lv_obj_set_pos(s_battery.bar, CardPad, 66);
+  lv_obj_set_pos(s_battery.bar, CardPad, 58);
   lv_obj_set_size(s_battery.bar, 92, 7);
   lv_bar_set_range(s_battery.bar, 0, 100);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(0x263241), 0);
@@ -262,9 +262,9 @@ void create() {
                          "uptime --",
                          &lv_font_montserrat_12,
                          ColorMuted,
-                         224,
-                         34,
-                         88);
+                         218,
+                         33,
+                         94);
   lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_RIGHT, 0);
 
   setBadge(s_wifiBadge, "WiFi --", 0x233041, ColorMuted);
