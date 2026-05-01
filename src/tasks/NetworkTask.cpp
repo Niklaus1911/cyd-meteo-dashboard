@@ -34,10 +34,13 @@ uint32_t s_lastMqttAttemptMs = 0;
 uint32_t s_lastIncompleteMqttLogMs = 0;
 uint32_t s_lastDiagnosticLogMs = 0;
 uint32_t s_lastStackLogMs = 0;
+uint32_t s_lastRssiUpdateMs = 0;
+uint32_t s_lastHeapUpdateMs = 0;
 bool s_wifiWasConnected = false;
 bool s_mqttWasConnected = false;
 bool s_saveMqttSettingsRequested = false;
 char s_mqttPortText[8] = {};
+char s_lastWifiIpAddress[16] = {};
 
 void logStackHighWaterMarkNow(const char* context);
 
@@ -89,6 +92,42 @@ void logMqttSettings(const char* prefix) {
 
 void publishMqttBrokerHost() {
   AppStateStore::setMqttBrokerHost(s_mqttSettings.host, 0);
+}
+
+void clearWifiDiagnostics() {
+  copyString(s_lastWifiIpAddress, sizeof(s_lastWifiIpAddress), "");
+  s_lastRssiUpdateMs = 0;
+  AppStateStore::setWifiStatus(false, "", 0, 0);
+  AppStateStore::setWifiIpAddress("", 0);
+}
+
+void updateWifiDiagnostics(uint32_t nowMs, bool force) {
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  const String ipAddress = WiFi.localIP().toString();
+  const bool ipChanged = strcmp(s_lastWifiIpAddress, ipAddress.c_str()) != 0;
+  const bool rssiDue = force || (nowMs - s_lastRssiUpdateMs >= AppConfig::RssiUpdatePeriodMs);
+
+  if (rssiDue) {
+    AppStateStore::setWifiStatus(true, WiFi.SSID().c_str(), WiFi.RSSI(), 0);
+    s_lastRssiUpdateMs = nowMs;
+  }
+
+  if (force || ipChanged) {
+    AppStateStore::setWifiIpAddress(ipAddress.c_str(), 0);
+    copyString(s_lastWifiIpAddress, sizeof(s_lastWifiIpAddress), ipAddress.c_str());
+  }
+}
+
+void updateHeapDiagnostic(uint32_t nowMs, bool force) {
+  if (!force && nowMs - s_lastHeapUpdateMs < AppConfig::HeapUpdatePeriodMs) {
+    return;
+  }
+
+  AppStateStore::updateFreeHeap(ESP.getFreeHeap(), 0);
+  s_lastHeapUpdateMs = nowMs;
 }
 
 void setWifiEvent(bool connected) {
@@ -259,13 +298,16 @@ void maintainWifi(uint32_t nowMs) {
 
   if (connected) {
     if (!s_wifiWasConnected) {
+      const String ipAddress = WiFi.localIP().toString();
       LOG_TASK("WiFi connected ssid='%s' ip=%s rssi=%d",
                WiFi.SSID().c_str(),
-               WiFi.localIP().toString().c_str(),
+               ipAddress.c_str(),
                WiFi.RSSI());
+      updateWifiDiagnostics(nowMs, true);
+    } else {
+      updateWifiDiagnostics(nowMs, false);
     }
 
-    AppStateStore::setWifiStatus(true, WiFi.SSID().c_str(), WiFi.RSSI(), 0);
     setWifiEvent(true);
     s_wifiWasConnected = true;
     return;
@@ -274,10 +316,10 @@ void maintainWifi(uint32_t nowMs) {
   if (s_wifiWasConnected) {
     LOG_TASK("WiFi disconnected");
     s_mqttClient.disconnect();
+    clearWifiDiagnostics();
+    AppStateStore::setMqttStatus(false, AppConfig::MqttClientId, 0);
   }
 
-  AppStateStore::setWifiStatus(false, "", 0, 0);
-  AppStateStore::setMqttStatus(false, AppConfig::MqttClientId, 0);
   setWifiEvent(false);
   s_wifiWasConnected = false;
   s_mqttWasConnected = false;
@@ -368,7 +410,7 @@ void resetCredentialsAndRestart() {
   }
 
   WiFi.disconnect(true, true);
-  AppStateStore::setWifiStatus(false, "", 0, 0);
+  clearWifiDiagnostics();
   AppStateStore::setMqttStatus(false, AppConfig::MqttClientId, 0);
   setWifiEvent(false);
   setMqttEvent(false);
@@ -401,9 +443,9 @@ void maintainMqtt(uint32_t nowMs) {
   if (s_mqttClient.connected()) {
     if (!s_mqttWasConnected) {
       LOG_TASK("MQTT connected");
+      AppStateStore::setMqttStatus(true, AppConfig::MqttClientId, 0);
     }
 
-    AppStateStore::setMqttStatus(true, AppConfig::MqttClientId, 0);
     setMqttEvent(true);
     s_mqttWasConnected = true;
     s_mqttClient.loop();
@@ -413,9 +455,9 @@ void maintainMqtt(uint32_t nowMs) {
   if (s_mqttWasConnected) {
     const int state = s_mqttClient.state();
     LOG_TASK("MQTT disconnected state=%d reason='%s'", state, mqttStateReason(state));
+    AppStateStore::setMqttStatus(false, AppConfig::MqttClientId, 0);
   }
 
-  AppStateStore::setMqttStatus(false, AppConfig::MqttClientId, 0);
   setMqttEvent(false);
   s_mqttWasConnected = false;
 
@@ -618,8 +660,9 @@ void networkTaskMain(void*) {
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t lastStatusLogMs = 0;
 
-  AppStateStore::setWifiStatus(false, "", 0);
+  clearWifiDiagnostics();
   AppStateStore::setMqttStatus(false, AppConfig::MqttClientId);
+  updateHeapDiagnostic(millis(), true);
 
   runWiFiManager(millis());
 
@@ -627,6 +670,7 @@ void networkTaskMain(void*) {
     const uint32_t nowMs = millis();
 
     AppStateStore::updateUptime(nowMs, 0);
+    updateHeapDiagnostic(nowMs, false);
     maintainWifi(nowMs);
     maintainMqtt(nowMs);
     processInboundMqtt();

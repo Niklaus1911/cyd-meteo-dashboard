@@ -64,6 +64,21 @@ bool setWifiStatus(bool connected,
   return true;
 }
 
+bool setWifiIpAddress(const char* ipAddress, TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  copyString(s_state.wifiIpAddress, sizeof(s_state.wifiIpAddress), ipAddress);
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
 bool setMqttStatus(bool connected, const char* clientId, TickType_t timeoutTicks) {
   if (s_mutex == nullptr) {
     return false;
@@ -226,6 +241,21 @@ bool updateUptime(uint32_t uptimeMs, TickType_t timeoutTicks) {
   }
 
   s_state.uptimeMs = uptimeMs;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
+bool updateFreeHeap(uint32_t freeHeapBytes, TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  s_state.freeHeapBytes = freeHeapBytes;
 
   xSemaphoreGive(s_mutex);
   return true;

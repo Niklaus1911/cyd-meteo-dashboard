@@ -24,6 +24,8 @@ constexpr uint32_t UiRefreshPeriodMs = 500;
 constexpr uint32_t StatusLogPeriodMs = 5000;
 constexpr uint32_t DiagnosticLogPeriodMs = 30000;
 constexpr uint32_t StackLogPeriodMs = 30000;
+constexpr uint32_t RssiUpdatePeriodMs = 10000;
+constexpr uint32_t HeapUpdatePeriodMs = 30000;
 
 constexpr uint8_t CommandQueueLength = 8;
 constexpr uint8_t MqttInboundQueueLength = 6;

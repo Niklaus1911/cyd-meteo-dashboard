@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <lvgl.h>
 
+#include "AppConfig.h"
 #include "AppQueues.h"
 #include "Log.h"
 
@@ -54,7 +55,13 @@ lv_obj_t* s_gearButton = nullptr;
 
 lv_obj_t* s_settingsWifi = nullptr;
 lv_obj_t* s_settingsMqtt = nullptr;
+lv_obj_t* s_settingsIp = nullptr;
+lv_obj_t* s_settingsRssi = nullptr;
 lv_obj_t* s_settingsBroker = nullptr;
+lv_obj_t* s_settingsLast = nullptr;
+lv_obj_t* s_settingsExpected = nullptr;
+lv_obj_t* s_settingsStale = nullptr;
+lv_obj_t* s_settingsHeap = nullptr;
 lv_obj_t* s_eraseButton = nullptr;
 lv_obj_t* s_resettingTitle = nullptr;
 lv_obj_t* s_resettingDetail = nullptr;
@@ -361,6 +368,27 @@ void formatDuration(char* buffer,
   }
 }
 
+void formatCompactDuration(char* buffer,
+                           size_t bufferSize,
+                           const char* prefix,
+                           uint32_t durationMs) {
+  const uint32_t totalSeconds = durationMs / 1000UL;
+  const uint32_t totalMinutes = totalSeconds / 60UL;
+
+  if (totalMinutes >= 60UL) {
+    snprintf(buffer,
+             bufferSize,
+             "%s %luh %02lum",
+             prefix,
+             static_cast<unsigned long>(totalMinutes / 60UL),
+             static_cast<unsigned long>(totalMinutes % 60UL));
+  } else if (totalMinutes > 0) {
+    snprintf(buffer, bufferSize, "%s %lum", prefix, static_cast<unsigned long>(totalMinutes));
+  } else {
+    snprintf(buffer, bufferSize, "%s %lus", prefix, static_cast<unsigned long>(totalSeconds));
+  }
+}
+
 void updateBatteryBar(const AppState& state) {
   if (s_battery.bar == nullptr) {
     return;
@@ -482,16 +510,23 @@ void create(QueueHandle_t commandQueue) {
 
   createLabel(s_settingsPage, "Settings", &lv_font_montserrat_20, ColorText, 8, 10, 160);
   createButton(s_settingsPage, "BACK", 220, 8, 92, 40, onBackButton, ColorPanel);
-  s_settingsWifi = createLabel(s_settingsPage, "WiFi: --", &lv_font_montserrat_14, ColorText, 14, 58, 292);
-  s_settingsMqtt = createLabel(s_settingsPage, "MQTT: --", &lv_font_montserrat_14, ColorText, 14, 86, 292);
+  s_settingsWifi = createLabel(s_settingsPage, "WiFi: --", &lv_font_montserrat_12, ColorText, 14, 54, 136);
+  s_settingsMqtt = createLabel(s_settingsPage, "MQTT: --", &lv_font_montserrat_12, ColorText, 166, 54, 140);
+  s_settingsIp = createLabel(s_settingsPage, "IP: --", &lv_font_montserrat_12, ColorMuted, 14, 76, 292);
   s_settingsBroker = createLabel(s_settingsPage,
                                  "Broker: --",
-                                 &lv_font_montserrat_14,
+                                 &lv_font_montserrat_12,
                                  ColorMuted,
                                  14,
-                                 114,
+                                 98,
                                  292);
-  createButton(s_settingsPage, "Reset WiFi/MQTT", 32, 158, 256, 52, onResetButton, 0x243246);
+  lv_label_set_long_mode(s_settingsBroker, LV_LABEL_LONG_DOT);
+  s_settingsRssi = createLabel(s_settingsPage, "RSSI: --", &lv_font_montserrat_12, ColorMuted, 14, 120, 136);
+  s_settingsHeap = createLabel(s_settingsPage, "Heap: --", &lv_font_montserrat_12, ColorMuted, 166, 120, 140);
+  s_settingsLast = createLabel(s_settingsPage, "Last: --", &lv_font_montserrat_12, ColorMuted, 14, 142, 136);
+  s_settingsExpected = createLabel(s_settingsPage, "Expect: 10m", &lv_font_montserrat_12, ColorMuted, 166, 142, 140);
+  s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 164, 292);
+  createButton(s_settingsPage, "Reset WiFi/MQTT", 32, 184, 256, 48, onResetButton, 0x243246);
 
   createLabel(s_confirmPage,
               "Erase saved WiFi and MQTT settings?",
@@ -543,23 +578,60 @@ void update(const AppState& state) {
            state.mqttConnected ? 0x1B6B3B : 0x4A2530,
            state.mqttConnected ? ColorText : ColorMuted);
 
-  snprintf(buffer,
-           sizeof(buffer),
-           "WiFi: %s",
-           state.wifiConnected ? state.wifiSsid : "--");
+  snprintf(buffer, sizeof(buffer), "WiFi: %s", state.wifiConnected ? "OK" : "--");
   setLabel(s_settingsWifi, buffer);
+
+  snprintf(buffer, sizeof(buffer), "MQTT: %s", state.mqttConnected ? "OK" : "--");
+  setLabel(s_settingsMqtt, buffer);
 
   snprintf(buffer,
            sizeof(buffer),
-           "MQTT: %s",
-           state.mqttConnected ? "connected" : "disconnected");
-  setLabel(s_settingsMqtt, buffer);
+           "IP: %s",
+           state.wifiConnected && state.wifiIpAddress[0] != '\0' ? state.wifiIpAddress : "--");
+  setLabel(s_settingsIp, buffer);
 
   snprintf(buffer,
            sizeof(buffer),
            "Broker: %s",
            state.mqttBrokerHost[0] != '\0' ? state.mqttBrokerHost : "--");
   setLabel(s_settingsBroker, buffer);
+
+  if (state.wifiConnected) {
+    snprintf(buffer, sizeof(buffer), "RSSI: %d dBm", state.wifiRssiDbm);
+  } else {
+    snprintf(buffer, sizeof(buffer), "RSSI: --");
+  }
+  setLabel(s_settingsRssi, buffer);
+
+  if (state.freeHeapBytes > 0) {
+    snprintf(buffer,
+             sizeof(buffer),
+             "Heap: %luk",
+             static_cast<unsigned long>(state.freeHeapBytes / 1024UL));
+  } else {
+    snprintf(buffer, sizeof(buffer), "Heap: --");
+  }
+  setLabel(s_settingsHeap, buffer);
+
+  const uint32_t settingsAgeMs = lastUpdateAgeMs(state);
+  if (state.lastMqttReceiveMs == 0) {
+    snprintf(buffer, sizeof(buffer), "Last: --");
+  } else {
+    formatCompactDuration(buffer, sizeof(buffer), "Last:", settingsAgeMs);
+  }
+  setLabel(s_settingsLast, buffer);
+
+  formatCompactDuration(buffer,
+                        sizeof(buffer),
+                        "Expect:",
+                        AppConfig::SensorExpectedUpdateIntervalMs);
+  setLabel(s_settingsExpected, buffer);
+
+  formatCompactDuration(buffer,
+                        sizeof(buffer),
+                        "Stale:",
+                        AppConfig::TelemetryStaleAfterMs);
+  setLabel(s_settingsStale, buffer);
 
   if (state.credentialResetRequested || state.credentialResetting || state.credentialRebooting) {
     setLabel(s_resettingTitle, state.credentialResetting ? "Resetting..." : "Reset requested");

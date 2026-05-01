@@ -37,6 +37,7 @@ struct SensorTelemetry {
 struct AppState {
   bool wifiConnected = false;
   char wifiSsid[33] = {};
+  char wifiIpAddress[16] = {};
   int wifiRssiDbm = 0;
 
   bool mqttConnected = false;
@@ -50,4 +51,5 @@ struct AppState {
   uint32_t lastTelemetryUpdateMs = 0;
   uint32_t lastMqttReceiveMs = 0;
   uint32_t uptimeMs = 0;
+  uint32_t freeHeapBytes = 0;
 };

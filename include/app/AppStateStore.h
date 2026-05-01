@@ -16,6 +16,8 @@ bool setWifiStatus(bool connected,
                    int rssiDbm,
                    TickType_t timeoutTicks = pdMS_TO_TICKS(20));
 
+bool setWifiIpAddress(const char* ipAddress, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
+
 bool setMqttStatus(bool connected,
                    const char* clientId,
                    TickType_t timeoutTicks = pdMS_TO_TICKS(20));
@@ -41,6 +43,8 @@ bool setTelemetryStale(bool stale, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
 bool recordMqttReceive(uint32_t receiveMs, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
 
 bool updateUptime(uint32_t uptimeMs, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
+
+bool updateFreeHeap(uint32_t freeHeapBytes, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
 
 SemaphoreHandle_t mutexHandle();
 
