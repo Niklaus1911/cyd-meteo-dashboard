@@ -13,6 +13,8 @@ struct MetricCard {
   lv_obj_t* bar = nullptr;
 };
 
+constexpr lv_coord_t CardPad = 8;
+
 constexpr uint32_t ColorBg = 0x080D14;
 constexpr uint32_t ColorPanel = 0x111A24;
 constexpr uint32_t ColorPanelAlt = 0x142030;
@@ -95,6 +97,7 @@ MetricCard createMetricCard(lv_obj_t* parent,
                             lv_coord_t width,
                             lv_coord_t height,
                             bool large,
+                            bool compact,
                             uint32_t accent) {
   MetricCard metric;
   metric.card = createCard(parent, x, y, width, height, large ? ColorPanelAlt : ColorPanel);
@@ -102,23 +105,24 @@ MetricCard createMetricCard(lv_obj_t* parent,
                              title,
                              &lv_font_montserrat_12,
                              ColorMuted,
-                             10,
-                             8,
-                             width - 20);
+                             CardPad,
+                             7,
+                             width - (CardPad * 2));
   metric.value = createLabel(metric.card,
                              "--",
-                             large ? &lv_font_montserrat_20 : &lv_font_montserrat_16,
+                             large ? &lv_font_montserrat_20 :
+                                     (compact ? &lv_font_montserrat_14 : &lv_font_montserrat_16),
                              accent,
-                             10,
+                             CardPad,
                              large ? 31 : 29,
-                             width - 20);
+                             width - (CardPad * 2));
   metric.detail = createLabel(metric.card,
                               "",
                               &lv_font_montserrat_12,
                               ColorMuted,
-                              10,
+                              CardPad,
                               height - 20,
-                              width - 20);
+                              width - (CardPad * 2));
   return metric;
 }
 
@@ -214,18 +218,18 @@ void create() {
                       210);
   lv_obj_set_style_text_align(s_age, LV_TEXT_ALIGN_RIGHT, 0);
 
-  s_temperature = createMetricCard(screen, "OUTSIDE TEMP", 8, 60, 150, 82, true, ColorCyan);
-  s_solar = createMetricCard(screen, "SOLAR PANEL", 8, 148, 150, 62, false, ColorAmber);
-  s_humidity = createMetricCard(screen, "HUMIDITY", 166, 60, 70, 62, false, ColorBlue);
-  s_pressure = createMetricCard(screen, "PRESSURE", 242, 60, 70, 62, false, ColorPurple);
-  s_battery = createMetricCard(screen, "BATTERY", 166, 130, 146, 80, false, ColorGreen);
+  s_temperature = createMetricCard(screen, "TEMP", 8, 60, 152, 82, true, false, ColorCyan);
+  s_solar = createMetricCard(screen, "SOLAR", 8, 148, 152, 62, false, false, ColorAmber);
+  s_humidity = createMetricCard(screen, "HUMID", 166, 60, 70, 62, false, true, ColorBlue);
+  s_pressure = createMetricCard(screen, "PRESS", 242, 60, 70, 62, false, true, ColorPurple);
+  s_battery = createMetricCard(screen, "BATTERY", 166, 130, 146, 80, false, false, ColorGreen);
 
-  lv_obj_set_pos(s_solar.detail, 10, 43);
-  lv_obj_set_pos(s_battery.detail, 10, 50);
+  lv_obj_set_pos(s_solar.detail, CardPad, 43);
+  lv_obj_set_pos(s_battery.detail, CardPad, 50);
 
   s_battery.bar = lv_bar_create(s_battery.card);
-  lv_obj_set_pos(s_battery.bar, 10, 64);
-  lv_obj_set_size(s_battery.bar, 126, 6);
+  lv_obj_set_pos(s_battery.bar, CardPad, 64);
+  lv_obj_set_size(s_battery.bar, 130, 6);
   lv_bar_set_range(s_battery.bar, 0, 100);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(0x263241), 0);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(ColorGreen), LV_PART_INDICATOR);
@@ -283,34 +287,31 @@ void update(const AppState& state) {
                     "C",
                     1);
   setLabel(s_temperature.value, buffer);
-  setLabel(s_temperature.detail, state.latestSensor.stale ? "waiting for fresh MQTT" : "from ESPHome");
+  setLabel(s_temperature.detail, state.latestSensor.stale ? "stale" : "");
 
-  formatMetricValue(buffer,
-                    sizeof(buffer),
-                    state.latestSensor.outsideHumidityPercent,
-                    state.latestSensor.outsideHumidityValid,
-                    "%",
-                    0);
+  if (state.latestSensor.outsideHumidityValid && !isnan(state.latestSensor.outsideHumidityPercent)) {
+    snprintf(buffer, sizeof(buffer), "%.0f%%", state.latestSensor.outsideHumidityPercent);
+  } else {
+    snprintf(buffer, sizeof(buffer), "--%%");
+  }
   setLabel(s_humidity.value, buffer);
-  setLabel(s_humidity.detail, "outside");
+  setLabel(s_humidity.detail, "");
 
-  formatMetricValue(buffer,
-                    sizeof(buffer),
-                    state.latestSensor.absolutePressurehPa,
-                    state.latestSensor.absolutePressureValid,
-                    "hPa",
-                    0);
+  if (state.latestSensor.absolutePressureValid && !isnan(state.latestSensor.absolutePressurehPa)) {
+    snprintf(buffer, sizeof(buffer), "%.0f", state.latestSensor.absolutePressurehPa);
+  } else {
+    snprintf(buffer, sizeof(buffer), "--");
+  }
   setLabel(s_pressure.value, buffer);
-  setLabel(s_pressure.detail, "absolute");
+  setLabel(s_pressure.detail, "hPa");
 
-  formatMetricValue(buffer,
-                    sizeof(buffer),
-                    state.latestSensor.batteryPercent,
-                    state.latestSensor.batteryPercentValid,
-                    "%",
-                    0);
+  if (state.latestSensor.batteryPercentValid && !isnan(state.latestSensor.batteryPercent)) {
+    snprintf(buffer, sizeof(buffer), "%.0f%%", state.latestSensor.batteryPercent);
+  } else {
+    snprintf(buffer, sizeof(buffer), "--%%");
+  }
   setLabel(s_battery.value, buffer);
-  setLabel(s_battery.detail, state.latestSensor.batteryPercentValid ? "sensor node" : "waiting");
+  setLabel(s_battery.detail, state.latestSensor.batteryPercentValid ? "" : "waiting");
   updateBatteryBar(state);
 
   formatMetricValue(buffer,
