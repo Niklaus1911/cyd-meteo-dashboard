@@ -205,6 +205,12 @@ Upload:
 /home/giuseppe/.platformio/penv/bin/platformio run --target upload
 ```
 
+Upload su porta esplicita, da eseguire manualmente quando la CYD e' su `/dev/ttyUSB1`:
+
+```bash
+/home/giuseppe/.platformio/penv/bin/platformio run --target upload --upload-port /dev/ttyUSB1
+```
+
 Monitor seriale:
 
 ```bash
