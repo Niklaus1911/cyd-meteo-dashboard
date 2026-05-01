@@ -153,7 +153,7 @@ lv_obj_t* createButton(lv_obj_t* parent,
   lv_obj_set_size(button, width, height);
   styleButton(button, color);
   if (callback != nullptr) {
-    lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(button, callback, LV_EVENT_ALL, nullptr);
   }
 
   lv_obj_t* label = lv_label_create(button);
@@ -268,27 +268,53 @@ void onGearButton(lv_event_t* event) {
   const lv_event_code_t code = lv_event_get_code(event);
   if (code == LV_EVENT_PRESSED) {
     LOG_TASK("gear button pressed");
-  } else if (code == LV_EVENT_CLICKED) {
-    LOG_TASK("gear button clicked");
   } else if (code == LV_EVENT_RELEASED) {
     LOG_TASK("opening settings screen");
     showPage(Page::Settings);
   }
 }
 
-void onBackButton(lv_event_t*) {
-  showPage(Page::Dashboard);
+void onBackButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("settings back pressed");
+  } else if (code == LV_EVENT_RELEASED) {
+    LOG_TASK("settings back released");
+    showPage(Page::Dashboard);
+  }
 }
 
-void onResetButton(lv_event_t*) {
-  showPage(Page::ResetConfirm);
+void onResetButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("reset pressed");
+  } else if (code == LV_EVENT_RELEASED) {
+    LOG_TASK("reset released");
+    showPage(Page::ResetConfirm);
+  }
 }
 
-void onCancelButton(lv_event_t*) {
-  showPage(Page::Settings);
+void onCancelButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("cancel pressed");
+  } else if (code == LV_EVENT_RELEASED) {
+    LOG_TASK("cancel released");
+    showPage(Page::Settings);
+  }
 }
 
-void onEraseButton(lv_event_t*) {
+void onEraseButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("erase pressed");
+    return;
+  }
+  if (code != LV_EVENT_RELEASED) {
+    return;
+  }
+
+  LOG_TASK("erase released");
   if (s_eraseButton != nullptr) {
     lv_obj_add_state(s_eraseButton, LV_STATE_DISABLED);
   }
@@ -380,12 +406,12 @@ void create(QueueHandle_t commandQueue) {
 #else
                               "SET",
 #endif
-                              280,
-                              0,
-                              40,
-                              38,
+                              284,
+                              196,
+                              30,
+                              30,
                               nullptr,
-                              ColorPanel);
+                              ColorPanelAlt);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
   lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_ALL, nullptr);
 
@@ -398,7 +424,6 @@ void create(QueueHandle_t commandQueue) {
                       94,
                       33,
                       116);
-  lv_obj_move_foreground(s_gearButton);
 
   s_temperature = createMetricCard(s_dashboardPage, "TEMP", 8, 53, 118, 68, true, ColorCyan);
   s_humidity = createMetricCard(s_dashboardPage, "HUMID", 132, 53, 82, 68, false, ColorBlue);
@@ -440,6 +465,7 @@ void create(QueueHandle_t commandQueue) {
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(ColorGreen), LV_PART_INDICATOR);
   lv_obj_set_style_radius(s_battery.bar, 3, 0);
   lv_obj_set_style_radius(s_battery.bar, 3, LV_PART_INDICATOR);
+  lv_obj_move_foreground(s_gearButton);
 
   s_footer = createLabel(s_dashboardPage,
                          "uptime --",
@@ -455,7 +481,7 @@ void create(QueueHandle_t commandQueue) {
   setBadge(s_statusBadge, "NO DATA", 0x233041, ColorMuted);
 
   createLabel(s_settingsPage, "Settings", &lv_font_montserrat_20, ColorText, 8, 10, 160);
-  createButton(s_settingsPage, "BACK", 236, 8, 76, 30, onBackButton, ColorPanel);
+  createButton(s_settingsPage, "BACK", 220, 8, 92, 40, onBackButton, ColorPanel);
   s_settingsWifi = createLabel(s_settingsPage, "WiFi: --", &lv_font_montserrat_14, ColorText, 14, 58, 292);
   s_settingsMqtt = createLabel(s_settingsPage, "MQTT: --", &lv_font_montserrat_14, ColorText, 14, 86, 292);
   s_settingsBroker = createLabel(s_settingsPage,
@@ -465,7 +491,7 @@ void create(QueueHandle_t commandQueue) {
                                  14,
                                  114,
                                  292);
-  createButton(s_settingsPage, "Reset WiFi/MQTT", 44, 166, 232, 42, onResetButton, 0x243246);
+  createButton(s_settingsPage, "Reset WiFi/MQTT", 32, 158, 256, 52, onResetButton, 0x243246);
 
   createLabel(s_confirmPage,
               "Erase saved WiFi and MQTT settings?",
@@ -481,8 +507,8 @@ void create(QueueHandle_t commandQueue) {
               34,
               92,
               252);
-  createButton(s_confirmPage, "Cancel", 42, 154, 104, 42, onCancelButton, ColorPanel);
-  s_eraseButton = createButton(s_confirmPage, "Erase", 174, 154, 104, 42, onEraseButton, 0x5A2530);
+  createButton(s_confirmPage, "Cancel", 28, 150, 120, 52, onCancelButton, ColorPanel);
+  s_eraseButton = createButton(s_confirmPage, "Erase", 172, 150, 120, 52, onEraseButton, 0x5A2530);
 
   s_resettingTitle = createLabel(s_resettingPage,
                                  "Resetting...",
