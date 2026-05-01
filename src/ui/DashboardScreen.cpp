@@ -218,18 +218,29 @@ void create() {
                       210);
   lv_obj_set_style_text_align(s_age, LV_TEXT_ALIGN_RIGHT, 0);
 
-  s_temperature = createMetricCard(screen, "TEMP", 8, 60, 152, 82, true, false, ColorCyan);
-  s_solar = createMetricCard(screen, "SOLAR", 8, 148, 152, 62, false, false, ColorAmber);
-  s_humidity = createMetricCard(screen, "HUMID", 166, 60, 70, 62, false, true, ColorBlue);
-  s_pressure = createMetricCard(screen, "PRESS", 242, 60, 70, 62, false, true, ColorPurple);
-  s_battery = createMetricCard(screen, "BATTERY", 166, 130, 146, 80, false, false, ColorGreen);
+  s_temperature = createMetricCard(screen, "TEMP", 8, 60, 126, 64, false, false, ColorCyan);
+  s_humidity = createMetricCard(screen, "HUMID", 140, 60, 82, 62, false, true, ColorBlue);
+  s_pressure = createMetricCard(screen, "PRESS", 228, 60, 84, 62, false, true, ColorPurple);
+  s_solar = createMetricCard(screen, "SOLAR", 8, 130, 176, 80, false, false, ColorAmber);
+  s_battery = createMetricCard(screen, "BATTERY", 190, 130, 122, 80, false, false, ColorGreen);
 
-  lv_obj_set_pos(s_solar.detail, CardPad, 43);
+  lv_obj_set_width(s_temperature.value, 110);
+  lv_obj_set_pos(s_temperature.value, CardPad, 29);
+
+  lv_obj_set_width(s_solar.value, 160);
+  lv_obj_set_pos(s_solar.value, CardPad, 28);
+  lv_obj_set_style_text_font(s_solar.value, &lv_font_montserrat_16, 0);
+  lv_obj_set_pos(s_solar.detail, CardPad, 52);
+  lv_obj_set_width(s_solar.detail, 160);
+  lv_obj_set_style_text_font(s_solar.detail, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_color(s_solar.detail, lv_color_hex(ColorAmber), 0);
+
   lv_obj_set_pos(s_battery.detail, CardPad, 50);
+  lv_obj_set_width(s_battery.value, 106);
 
   s_battery.bar = lv_bar_create(s_battery.card);
   lv_obj_set_pos(s_battery.bar, CardPad, 64);
-  lv_obj_set_size(s_battery.bar, 130, 6);
+  lv_obj_set_size(s_battery.bar, 106, 6);
   lv_bar_set_range(s_battery.bar, 0, 100);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(0x263241), 0);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(ColorGreen), LV_PART_INDICATOR);
@@ -284,6 +295,7 @@ void update(const AppState& state) {
                     sizeof(buffer),
                     state.latestSensor.outsideTemperatureC,
                     state.latestSensor.outsideTemperatureValid,
+                    "\xC2\xB0"
                     "C",
                     1);
   setLabel(s_temperature.value, buffer);
@@ -298,7 +310,7 @@ void update(const AppState& state) {
   setLabel(s_humidity.detail, "");
 
   if (state.latestSensor.absolutePressureValid && !isnan(state.latestSensor.absolutePressurehPa)) {
-    snprintf(buffer, sizeof(buffer), "%.0f", state.latestSensor.absolutePressurehPa);
+    snprintf(buffer, sizeof(buffer), "%.2f", state.latestSensor.absolutePressurehPa);
   } else {
     snprintf(buffer, sizeof(buffer), "--");
   }
@@ -306,7 +318,7 @@ void update(const AppState& state) {
   setLabel(s_pressure.detail, "hPa");
 
   if (state.latestSensor.batteryPercentValid && !isnan(state.latestSensor.batteryPercent)) {
-    snprintf(buffer, sizeof(buffer), "%.0f%%", state.latestSensor.batteryPercent);
+    snprintf(buffer, sizeof(buffer), "%.1f%%", state.latestSensor.batteryPercent);
   } else {
     snprintf(buffer, sizeof(buffer), "--%%");
   }
@@ -314,16 +326,15 @@ void update(const AppState& state) {
   setLabel(s_battery.detail, state.latestSensor.batteryPercentValid ? "" : "waiting");
   updateBatteryBar(state);
 
-  formatMetricValue(buffer,
-                    sizeof(buffer),
-                    state.latestSensor.solarPanelVoltageV,
-                    state.latestSensor.solarPanelVoltageValid,
-                    "V",
-                    2);
+  if (state.latestSensor.solarPanelVoltageValid && !isnan(state.latestSensor.solarPanelVoltageV)) {
+    snprintf(buffer, sizeof(buffer), "%.3f V", state.latestSensor.solarPanelVoltageV);
+  } else {
+    snprintf(buffer, sizeof(buffer), "-- V");
+  }
   setLabel(s_solar.value, buffer);
 
   if (state.latestSensor.solarPanelCurrentValid && !isnan(state.latestSensor.solarPanelCurrentmA)) {
-    snprintf(buffer, sizeof(buffer), "%.1f mA", state.latestSensor.solarPanelCurrentmA);
+    snprintf(buffer, sizeof(buffer), "%.3f mA", state.latestSensor.solarPanelCurrentmA);
   } else {
     snprintf(buffer, sizeof(buffer), "-- mA");
   }
