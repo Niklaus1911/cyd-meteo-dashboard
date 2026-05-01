@@ -219,8 +219,8 @@ void create() {
   lv_obj_set_style_text_align(s_age, LV_TEXT_ALIGN_RIGHT, 0);
 
   s_temperature = createMetricCard(screen, "TEMP", 8, 60, 126, 64, false, false, ColorCyan);
-  s_humidity = createMetricCard(screen, "HUMID", 140, 60, 82, 62, false, true, ColorBlue);
-  s_pressure = createMetricCard(screen, "PRESS", 228, 60, 84, 62, false, true, ColorPurple);
+  s_humidity = createMetricCard(screen, "HUMID", 140, 60, 82, 62, false, false, ColorBlue);
+  s_pressure = createMetricCard(screen, "PRESS", 228, 60, 84, 62, false, false, ColorPurple);
   s_solar = createMetricCard(screen, "SOLAR", 8, 130, 176, 80, false, false, ColorAmber);
   s_battery = createMetricCard(screen, "BATTERY", 190, 130, 122, 80, false, false, ColorGreen);
 
