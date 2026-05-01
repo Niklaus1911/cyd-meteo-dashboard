@@ -19,7 +19,8 @@ constexpr uint32_t NetworkTaskStackWords = 4096;
 constexpr uint32_t UiTaskStackWords = 4096;
 
 constexpr uint32_t NetworkLoopPeriodMs = 250;
-constexpr uint32_t UiLoopPeriodMs = 100;
+constexpr uint32_t UiLoopPeriodMs = 5;
+constexpr uint32_t UiRefreshPeriodMs = 500;
 constexpr uint32_t StatusLogPeriodMs = 5000;
 constexpr uint32_t DiagnosticLogPeriodMs = 30000;
 

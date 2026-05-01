@@ -6,7 +6,8 @@
 #include "AppQueues.h"
 #include "Log.h"
 #include "app/AppStateStore.h"
-#include "display/DisplayDiagnostic.h"
+#include "ui/DashboardScreen.h"
+#include "ui/LvglPort.h"
 
 namespace {
 
@@ -15,29 +16,36 @@ QueueHandle_t s_commandQueue = nullptr;
 
 void uiTaskMain(void*) {
   LOG_TASK("started");
-  DisplayDiagnostic::begin();
+  LvglPort::begin();
+  DashboardScreen::create();
 
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t lastStatusLogMs = 0;
-  uint32_t lastDisplayConfigLogMs = 0;
+  uint32_t lastUiUpdateMs = 0;
 
   for (;;) {
     const uint32_t nowMs = millis();
 
     AppState snapshot;
-    if (AppStateStore::copy(snapshot, 0) && nowMs - lastStatusLogMs >= AppConfig::StatusLogPeriodMs) {
+    const bool hasSnapshot = AppStateStore::copy(snapshot, 0);
+
+    if (hasSnapshot && nowMs - lastUiUpdateMs >= AppConfig::UiRefreshPeriodMs) {
+      lastUiUpdateMs = nowMs;
+      DashboardScreen::update(snapshot);
+    }
+
+    if (hasSnapshot && nowMs - lastStatusLogMs >= AppConfig::StatusLogPeriodMs) {
       lastStatusLogMs = nowMs;
-      LOG_TASK("UI skeleton active; wifi=%d mqtt=%d telemetry=%d uptime=%lu",
+      LOG_TASK("LVGL UI active; wifi=%d mqtt=%d telemetry_valid=%d telemetry_stale=%d uptime=%lu",
                snapshot.wifiConnected,
                snapshot.mqttConnected,
                snapshot.latestSensor.valid,
+               snapshot.latestSensor.stale,
                static_cast<unsigned long>(snapshot.uptimeMs));
     }
 
-    if (nowMs - lastDisplayConfigLogMs >= AppConfig::DiagnosticLogPeriodMs) {
-      lastDisplayConfigLogMs = nowMs;
-      DisplayDiagnostic::logConfig();
-    }
+    LvglPort::tick();
+    LvglPort::handleTimers();
 
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(AppConfig::UiLoopPeriodMs));
   }

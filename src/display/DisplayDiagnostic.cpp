@@ -1,32 +1,22 @@
 #include "display/DisplayDiagnostic.h"
 
 #include <Arduino.h>
-#include <TFT_eSPI.h>
 
 #include "Log.h"
 #include "display/DisplayConfig.h"
+#include "display/TftDisplay.h"
 
 namespace {
 
-TFT_eSPI s_tft;
-
-void setBacklight(bool enabled) {
-  if (DisplayConfig::BacklightPin < 0) {
-    return;
-  }
-
-  pinMode(DisplayConfig::BacklightPin, OUTPUT);
-  const bool active = enabled ? DisplayConfig::BacklightActiveHigh : !DisplayConfig::BacklightActiveHigh;
-  digitalWrite(DisplayConfig::BacklightPin, active ? HIGH : LOW);
-}
-
 void drawCenteredLabel(int16_t x, int16_t y, const char* label, uint16_t color) {
+  TFT_eSPI& s_tft = TftDisplay::tft();
   s_tft.setTextDatum(MC_DATUM);
   s_tft.setTextColor(color);
   s_tft.drawString(label, x, y, 2);
 }
 
 void drawCornerLabels() {
+  TFT_eSPI& s_tft = TftDisplay::tft();
   const int16_t width = s_tft.width();
   const int16_t height = s_tft.height();
 
@@ -48,6 +38,7 @@ void drawCornerLabels() {
 }
 
 void drawStatusPanel() {
+  TFT_eSPI& s_tft = TftDisplay::tft();
   const int16_t width = s_tft.width();
   const int16_t height = s_tft.height();
   const int16_t panelWidth = min<int16_t>(width - 24, 260);
@@ -76,18 +67,13 @@ void drawStatusPanel() {
 namespace DisplayDiagnostic {
 
 void begin() {
-  setBacklight(false);
-
-  s_tft.init();
-  s_tft.setRotation(DisplayConfig::Rotation);
-  s_tft.invertDisplay(DisplayConfig::InvertColors);
-
-  setBacklight(true);
+  TftDisplay::begin();
   render();
   logConfig();
 }
 
 void render() {
+  TFT_eSPI& s_tft = TftDisplay::tft();
   const int16_t width = s_tft.width();
   const int16_t height = s_tft.height();
   const int16_t barWidth = max<int16_t>(1, width / 8);
@@ -121,13 +107,7 @@ void render() {
 }
 
 void logConfig() {
-  LOG_TASK("display config driver=%s rotation=%u inversion=%s rgb_order=%s backlight_pin=%d backlight_active_high=%d",
-           DisplayConfig::driverName(),
-           DisplayConfig::Rotation,
-           DisplayConfig::inversionName(),
-           DisplayConfig::rgbOrderName(),
-           DisplayConfig::BacklightPin,
-           DisplayConfig::BacklightActiveHigh);
+  TftDisplay::logConfig();
 }
 
 }  // namespace DisplayDiagnostic
