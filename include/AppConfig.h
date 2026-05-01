@@ -39,9 +39,11 @@ constexpr const char* EspHomeSolarPanelCurrentTopic = "esp-c3-meteo-v2/sensor/so
 constexpr const char* EspHomeOutsideHumidityTopic = "esp-c3-meteo-v2/sensor/outside_humidity/state";
 constexpr const char* EspHomeAbsolutePressureTopic = "esp-c3-meteo-v2/sensor/absolute_pressure/state";
 
+constexpr uint32_t SensorExpectedUpdateIntervalMs = 10UL * 60UL * 1000UL;
+
 constexpr uint32_t WifiReconnectIntervalMs = 10000;
 constexpr uint32_t MqttReconnectIntervalMs = 5000;
-constexpr uint32_t TelemetryStaleAfterMs = 60000;
+constexpr uint32_t TelemetryStaleAfterMs = SensorExpectedUpdateIntervalMs + (5UL * 60UL * 1000UL);
 constexpr uint32_t WifiManagerPortalTimeoutSec = 180;
 constexpr uint32_t MqttSocketTimeoutSec = 2;
 constexpr uint32_t MqttKeepAliveSec = 30;

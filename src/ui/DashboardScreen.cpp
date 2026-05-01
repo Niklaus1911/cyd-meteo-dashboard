@@ -167,6 +167,34 @@ uint32_t lastUpdateAgeMs(const AppState& state) {
   return static_cast<uint32_t>(state.uptimeMs - state.lastMqttReceiveMs);
 }
 
+void formatDuration(char* buffer,
+                    size_t bufferSize,
+                    const char* prefix,
+                    uint32_t durationMs,
+                    bool includeHours) {
+  const uint32_t totalSeconds = durationMs / 1000UL;
+  const uint32_t seconds = totalSeconds % 60UL;
+  const uint32_t totalMinutes = totalSeconds / 60UL;
+
+  if (includeHours && totalMinutes >= 60UL) {
+    snprintf(buffer,
+             bufferSize,
+             "%s %luh %02lum",
+             prefix,
+             static_cast<unsigned long>(totalMinutes / 60UL),
+             static_cast<unsigned long>(totalMinutes % 60UL));
+  } else if (totalMinutes > 0) {
+    snprintf(buffer,
+             bufferSize,
+             "%s %lum %02lus",
+             prefix,
+             static_cast<unsigned long>(totalMinutes),
+             static_cast<unsigned long>(seconds));
+  } else {
+    snprintf(buffer, bufferSize, "%s %lus", prefix, static_cast<unsigned long>(seconds));
+  }
+}
+
 void updateBatteryBar(const AppState& state) {
   if (s_battery.bar == nullptr) {
     return;
@@ -289,7 +317,7 @@ void update(const AppState& state) {
   if (state.lastMqttReceiveMs == 0) {
     snprintf(buffer, sizeof(buffer), "age --");
   } else {
-    snprintf(buffer, sizeof(buffer), "age %lus", static_cast<unsigned long>(ageMs / 1000UL));
+    formatDuration(buffer, sizeof(buffer), "age", ageMs, false);
   }
   setLabel(s_age, buffer);
 
@@ -342,10 +370,7 @@ void update(const AppState& state) {
   }
   setLabel(s_solar.detail, buffer);
 
-  snprintf(buffer,
-           sizeof(buffer),
-           "up %lus",
-           static_cast<unsigned long>(state.uptimeMs / 1000UL));
+  formatDuration(buffer, sizeof(buffer), "up", state.uptimeMs, true);
   setLabel(s_footer, buffer);
 }
 
