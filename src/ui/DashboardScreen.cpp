@@ -28,7 +28,6 @@ constexpr uint32_t ColorBlue = 0x4DA3FF;
 constexpr uint32_t ColorCyan = 0x37D5D6;
 constexpr uint32_t ColorPurple = 0xB58BFF;
 
-lv_obj_t* s_title = nullptr;
 lv_obj_t* s_wifiBadge = nullptr;
 lv_obj_t* s_mqttBadge = nullptr;
 lv_obj_t* s_statusBadge = nullptr;
@@ -97,7 +96,6 @@ MetricCard createMetricCard(lv_obj_t* parent,
                             lv_coord_t width,
                             lv_coord_t height,
                             bool large,
-                            bool compact,
                             uint32_t accent) {
   MetricCard metric;
   metric.card = createCard(parent, x, y, width, height, large ? ColorPanelAlt : ColorPanel);
@@ -110,8 +108,7 @@ MetricCard createMetricCard(lv_obj_t* parent,
                              width - (CardPad * 2));
   metric.value = createLabel(metric.card,
                              "--",
-                             large ? &lv_font_montserrat_20 :
-                                     (compact ? &lv_font_montserrat_14 : &lv_font_montserrat_16),
+                             large ? &lv_font_montserrat_20 : &lv_font_montserrat_16,
                              accent,
                              CardPad,
                              large ? 31 : 29,
@@ -197,13 +194,7 @@ void create() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(ColorBg), 0);
   lv_obj_set_style_text_color(screen, lv_color_hex(ColorText), 0);
 
-  s_title = createLabel(screen,
-                        "ESP Meteo",
-                        &lv_font_montserrat_16,
-                        ColorText,
-                        8,
-                        6,
-                        110);
+  createLabel(screen, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 110);
 
   s_wifiBadge = createBadge(screen, 128, 5, 84);
   s_mqttBadge = createBadge(screen, 220, 5, 92);
@@ -217,11 +208,11 @@ void create() {
                       33,
                       116);
 
-  s_temperature = createMetricCard(screen, "TEMP", 8, 53, 118, 68, true, false, ColorCyan);
-  s_humidity = createMetricCard(screen, "HUMID", 132, 53, 82, 68, false, false, ColorBlue);
-  s_pressure = createMetricCard(screen, "PRESS", 220, 53, 92, 68, false, false, ColorPurple);
-  s_solar = createMetricCard(screen, "SOLAR", 8, 130, 190, 96, false, false, ColorAmber);
-  s_battery = createMetricCard(screen, "BATTERY", 204, 130, 108, 96, false, false, ColorGreen);
+  s_temperature = createMetricCard(screen, "TEMP", 8, 53, 118, 68, true, ColorCyan);
+  s_humidity = createMetricCard(screen, "HUMID", 132, 53, 82, 68, false, ColorBlue);
+  s_pressure = createMetricCard(screen, "PRESS", 220, 53, 92, 68, false, ColorPurple);
+  s_solar = createMetricCard(screen, "SOLAR", 8, 130, 190, 96, false, ColorAmber);
+  s_battery = createMetricCard(screen, "BATTERY", 204, 130, 108, 96, false, ColorGreen);
 
   lv_obj_set_width(s_temperature.value, 102);
   lv_obj_set_pos(s_temperature.value, CardPad, 28);

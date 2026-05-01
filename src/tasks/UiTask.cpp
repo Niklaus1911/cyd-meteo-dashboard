@@ -14,22 +14,6 @@ namespace {
 EventGroupHandle_t s_systemEvents = nullptr;
 QueueHandle_t s_commandQueue = nullptr;
 
-uint32_t s_lastStackLogMs = 0;
-
-void logStackHighWaterMark(uint32_t nowMs) {
-  if (nowMs - s_lastStackLogMs < AppConfig::StackLogPeriodMs) {
-    return;
-  }
-
-  s_lastStackLogMs = nowMs;
-
-  const UBaseType_t highWaterWords = uxTaskGetStackHighWaterMark(nullptr);
-  const uint32_t highWaterBytes = highWaterWords * sizeof(StackType_t);
-  LOG_TASK("stack high-water free=%lu bytes (%lu words)",
-           static_cast<unsigned long>(highWaterBytes),
-           static_cast<unsigned long>(highWaterWords));
-}
-
 void logStackHighWaterMarkNow(const char* context) {
   const UBaseType_t highWaterWords = uxTaskGetStackHighWaterMark(nullptr);
   const uint32_t highWaterBytes = highWaterWords * sizeof(StackType_t);
@@ -47,7 +31,6 @@ void uiTaskMain(void*) {
   logStackHighWaterMarkNow("after LVGL init");
 
   TickType_t lastWake = xTaskGetTickCount();
-  uint32_t lastStatusLogMs = 0;
   uint32_t lastUiUpdateMs = 0;
 
   for (;;) {
@@ -61,19 +44,8 @@ void uiTaskMain(void*) {
       DashboardScreen::update(snapshot);
     }
 
-    if (hasSnapshot && nowMs - lastStatusLogMs >= AppConfig::StatusLogPeriodMs) {
-      lastStatusLogMs = nowMs;
-      LOG_TASK("LVGL UI active; wifi=%d mqtt=%d telemetry_valid=%d telemetry_stale=%d uptime=%lu",
-               snapshot.wifiConnected,
-               snapshot.mqttConnected,
-               snapshot.latestSensor.valid,
-               snapshot.latestSensor.stale,
-               static_cast<unsigned long>(snapshot.uptimeMs));
-    }
-
     LvglPort::tick();
     LvglPort::handleTimers();
-    logStackHighWaterMark(nowMs);
 
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(AppConfig::UiLoopPeriodMs));
   }
