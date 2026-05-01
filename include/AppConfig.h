@@ -75,7 +75,7 @@ constexpr uint16_t DefaultMqttPort = 1883;
 constexpr size_t ForecastRegionMaxLength = 48;
 constexpr size_t ForecastAlertMaxLength = 96;
 constexpr size_t ForecastTextMaxLength = 256;
-constexpr size_t ForecastLowSummaryMaxLength = 384;
+constexpr size_t ForecastLowSummaryMaxLength = 1024;
 constexpr size_t ForecastUpdatedMaxLength = 24;
 
 }  // namespace AppConfig
