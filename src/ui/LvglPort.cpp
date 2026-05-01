@@ -4,6 +4,7 @@
 
 #include "Log.h"
 #include "display/TftDisplay.h"
+#include "ui/TouchInput.h"
 
 namespace {
 
@@ -47,6 +48,8 @@ void begin() {
   s_displayDriver.flush_cb = flushDisplay;
   s_displayDriver.draw_buf = &s_drawBuffer;
   lv_disp_drv_register(&s_displayDriver);
+
+  TouchInput::begin(tft.width(), tft.height());
 
   s_lastTickMs = millis();
   LOG_TASK("LVGL initialized hor=%d ver=%d draw_lines=%u", tft.width(), tft.height(), DrawBufferLines);
