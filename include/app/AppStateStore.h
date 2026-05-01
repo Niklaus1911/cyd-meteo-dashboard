@@ -20,6 +20,13 @@ bool setMqttStatus(bool connected,
                    const char* clientId,
                    TickType_t timeoutTicks = pdMS_TO_TICKS(20));
 
+bool setMqttBrokerHost(const char* host, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
+
+bool setCredentialResetStatus(bool requested,
+                              bool resetting,
+                              bool rebooting,
+                              TickType_t timeoutTicks = pdMS_TO_TICKS(20));
+
 bool updateTelemetry(const SensorTelemetry& telemetry,
                      uint32_t updateMs,
                      TickType_t timeoutTicks = pdMS_TO_TICKS(20));

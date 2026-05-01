@@ -80,6 +80,41 @@ bool setMqttStatus(bool connected, const char* clientId, TickType_t timeoutTicks
   return true;
 }
 
+bool setMqttBrokerHost(const char* host, TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  copyString(s_state.mqttBrokerHost, sizeof(s_state.mqttBrokerHost), host);
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
+bool setCredentialResetStatus(bool requested,
+                              bool resetting,
+                              bool rebooting,
+                              TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  s_state.credentialResetRequested = requested;
+  s_state.credentialResetting = resetting;
+  s_state.credentialRebooting = rebooting;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
 bool updateTelemetry(const SensorTelemetry& telemetry,
                      uint32_t updateMs,
                      TickType_t timeoutTicks) {

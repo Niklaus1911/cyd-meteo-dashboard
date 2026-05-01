@@ -27,7 +27,7 @@ void uiTaskMain(void*) {
   LOG_TASK("started");
   logStackHighWaterMarkNow("at start");
   LvglPort::begin();
-  DashboardScreen::create();
+  DashboardScreen::create(s_commandQueue);
   logStackHighWaterMarkNow("after LVGL init");
 
   TickType_t lastWake = xTaskGetTickCount();

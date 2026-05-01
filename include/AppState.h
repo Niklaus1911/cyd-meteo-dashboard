@@ -41,6 +41,10 @@ struct AppState {
 
   bool mqttConnected = false;
   char mqttClientId[32] = {};
+  char mqttBrokerHost[64] = {};
+  bool credentialResetRequested = false;
+  bool credentialResetting = false;
+  bool credentialRebooting = false;
 
   SensorTelemetry latestSensor = {};
   uint32_t lastTelemetryUpdateMs = 0;

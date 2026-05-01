@@ -6,6 +6,7 @@
 
 enum class CommandType : uint8_t {
   PublishMqttCommand = 0,
+  ResetCredentials,
 };
 
 struct CommandMessage {

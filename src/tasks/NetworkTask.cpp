@@ -87,6 +87,10 @@ void logMqttSettings(const char* prefix) {
            s_mqttSettings.hasCredentials());
 }
 
+void publishMqttBrokerHost() {
+  AppStateStore::setMqttBrokerHost(s_mqttSettings.host, 0);
+}
+
 void setWifiEvent(bool connected) {
   if (s_systemEvents == nullptr) {
     return;
@@ -237,6 +241,7 @@ bool runWiFiManager(uint32_t nowMs) {
   }
 
   configureMqttClientServer();
+  publishMqttBrokerHost();
 
   if (!connected) {
     LOG_TASK("WiFiManager timed out or failed; will retry later");
@@ -351,6 +356,41 @@ bool subscribeEspHomeTopics() {
   }
 
   return allSubscribed;
+}
+
+void resetCredentialsAndRestart() {
+  LOG_TASK("credential reset requested; clearing WiFiManager WiFi and MQTT settings");
+  AppStateStore::setCredentialResetStatus(true, true, false, 0);
+
+  if (s_mqttClient.connected()) {
+    publishAvailability("offline");
+    s_mqttClient.disconnect();
+  }
+
+  WiFi.disconnect(true, true);
+  AppStateStore::setWifiStatus(false, "", 0, 0);
+  AppStateStore::setMqttStatus(false, AppConfig::MqttClientId, 0);
+  setWifiEvent(false);
+  setMqttEvent(false);
+
+  WiFiManager wifiManager;
+  wifiManager.setDebugOutput(false);
+  wifiManager.resetSettings();
+
+  if (MqttSettingsStore::clear()) {
+    LOG_TASK("MQTT settings cleared from NVS for credential reset");
+  } else {
+    LOG_TASK("failed to clear MQTT settings from NVS for credential reset");
+  }
+
+  s_mqttSettings = {};
+  publishMqttBrokerHost();
+  AppStateStore::setCredentialResetStatus(true, true, true, 0);
+
+  LOG_TASK("restarting after credential reset; setup AP='%s'",
+           AppConfig::WifiManagerPortalSsid);
+  vTaskDelay(pdMS_TO_TICKS(AppConfig::RestartAfterConfigResetMs));
+  ESP.restart();
 }
 
 void maintainMqtt(uint32_t nowMs) {
@@ -540,7 +580,15 @@ void drainCommandQueue() {
 
   CommandMessage command;
   while (xQueueReceive(s_commandQueue, &command, 0) == pdTRUE) {
-    LOG_TASK("queued command topic='%s' payload='%s'", command.topic, command.payload);
+    switch (command.type) {
+      case CommandType::ResetCredentials:
+        resetCredentialsAndRestart();
+        break;
+      case CommandType::PublishMqttCommand:
+      default:
+        LOG_TASK("queued command topic='%s' payload='%s'", command.topic, command.payload);
+        break;
+    }
   }
 }
 
@@ -555,6 +603,7 @@ void networkTaskMain(void*) {
     LOG_TASK("MQTT settings unavailable; using defaults");
     logMqttSettings("default");
   }
+  publishMqttBrokerHost();
 
   WiFi.mode(WIFI_STA);
   WiFi.persistent(true);
