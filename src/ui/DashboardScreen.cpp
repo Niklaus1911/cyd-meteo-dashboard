@@ -17,7 +17,6 @@ constexpr lv_coord_t CardPad = 8;
 
 constexpr uint32_t ColorBg = 0x080D14;
 constexpr uint32_t ColorPanel = 0x111A24;
-constexpr uint32_t ColorPanelAlt = 0x142030;
 constexpr uint32_t ColorBorder = 0x253344;
 constexpr uint32_t ColorText = 0xF4F7FB;
 constexpr uint32_t ColorMuted = 0x93A4B8;
@@ -98,7 +97,7 @@ MetricCard createMetricCard(lv_obj_t* parent,
                             bool large,
                             uint32_t accent) {
   MetricCard metric;
-  metric.card = createCard(parent, x, y, width, height, large ? ColorPanelAlt : ColorPanel);
+  metric.card = createCard(parent, x, y, width, height);
   metric.title = createLabel(metric.card,
                              title,
                              &lv_font_montserrat_12,
@@ -137,26 +136,6 @@ void setBadge(lv_obj_t* badge, const char* text, uint32_t bgColor, uint32_t text
   lv_label_set_text(badge, text);
   lv_obj_set_style_bg_color(badge, lv_color_hex(bgColor), 0);
   lv_obj_set_style_text_color(badge, lv_color_hex(textColor), 0);
-}
-
-void formatMetricValue(char* buffer,
-                       size_t bufferSize,
-                       float value,
-                       bool valid,
-                       const char* suffix,
-                       uint8_t decimals) {
-  if (!valid || isnan(value)) {
-    snprintf(buffer, bufferSize, "-- %s", suffix);
-    return;
-  }
-
-  if (decimals == 0) {
-    snprintf(buffer, bufferSize, "%.0f %s", value, suffix);
-  } else if (decimals == 2) {
-    snprintf(buffer, bufferSize, "%.2f %s", value, suffix);
-  } else {
-    snprintf(buffer, bufferSize, "%.1f %s", value, suffix);
-  }
 }
 
 uint32_t lastUpdateAgeMs(const AppState& state) {
@@ -201,14 +180,15 @@ void updateBatteryBar(const AppState& state) {
   }
 
   int32_t percent = 0;
-  if (state.latestSensor.batteryPercentValid && !isnan(state.latestSensor.batteryPercent)) {
+  const bool valid = state.latestSensor.batteryPercentValid && !isnan(state.latestSensor.batteryPercent);
+  if (valid) {
     percent = static_cast<int32_t>(state.latestSensor.batteryPercent + 0.5f);
     percent = constrain(percent, 0, 100);
   }
 
   lv_bar_set_value(s_battery.bar, percent, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(s_battery.bar,
-                            lv_color_hex(percent < 20 ? ColorRed : ColorGreen),
+                            lv_color_hex(valid ? (percent < 20 ? ColorRed : ColorGreen) : 0x263241),
                             LV_PART_INDICATOR);
 }
 
@@ -321,15 +301,20 @@ void update(const AppState& state) {
   }
   setLabel(s_age, buffer);
 
-  formatMetricValue(buffer,
-                    sizeof(buffer),
-                    state.latestSensor.outsideTemperatureC,
-                    state.latestSensor.outsideTemperatureValid,
-                    "\xC2\xB0"
-                    "C",
-                    1);
+  if (state.latestSensor.outsideTemperatureValid && !isnan(state.latestSensor.outsideTemperatureC)) {
+    snprintf(buffer,
+             sizeof(buffer),
+             "%.1f \xC2\xB0"
+             "C",
+             state.latestSensor.outsideTemperatureC);
+  } else {
+    snprintf(buffer,
+             sizeof(buffer),
+             "--.- \xC2\xB0"
+             "C");
+  }
   setLabel(s_temperature.value, buffer);
-  setLabel(s_temperature.detail, state.latestSensor.stale ? "stale" : "");
+  setLabel(s_temperature.detail, "");
 
   if (state.latestSensor.outsideHumidityValid && !isnan(state.latestSensor.outsideHumidityPercent)) {
     snprintf(buffer, sizeof(buffer), "%.0f%%", state.latestSensor.outsideHumidityPercent);
@@ -342,7 +327,7 @@ void update(const AppState& state) {
   if (state.latestSensor.absolutePressureValid && !isnan(state.latestSensor.absolutePressurehPa)) {
     snprintf(buffer, sizeof(buffer), "%.2f", state.latestSensor.absolutePressurehPa);
   } else {
-    snprintf(buffer, sizeof(buffer), "--");
+    snprintf(buffer, sizeof(buffer), "----.--");
   }
   setLabel(s_pressure.value, buffer);
   setLabel(s_pressure.detail, "hPa");
@@ -350,23 +335,23 @@ void update(const AppState& state) {
   if (state.latestSensor.batteryPercentValid && !isnan(state.latestSensor.batteryPercent)) {
     snprintf(buffer, sizeof(buffer), "%.1f%%", state.latestSensor.batteryPercent);
   } else {
-    snprintf(buffer, sizeof(buffer), "--%%");
+    snprintf(buffer, sizeof(buffer), "--.-%%");
   }
   setLabel(s_battery.value, buffer);
-  setLabel(s_battery.detail, state.latestSensor.batteryPercentValid ? "" : "waiting");
+  setLabel(s_battery.detail, "");
   updateBatteryBar(state);
 
   if (state.latestSensor.solarPanelVoltageValid && !isnan(state.latestSensor.solarPanelVoltageV)) {
     snprintf(buffer, sizeof(buffer), "%.3f V", state.latestSensor.solarPanelVoltageV);
   } else {
-    snprintf(buffer, sizeof(buffer), "-- V");
+    snprintf(buffer, sizeof(buffer), "-.--- V");
   }
   setLabel(s_solar.value, buffer);
 
   if (state.latestSensor.solarPanelCurrentValid && !isnan(state.latestSensor.solarPanelCurrentmA)) {
     snprintf(buffer, sizeof(buffer), "%.3f mA", state.latestSensor.solarPanelCurrentmA);
   } else {
-    snprintf(buffer, sizeof(buffer), "-- mA");
+    snprintf(buffer, sizeof(buffer), "-.--- mA");
   }
   setLabel(s_solar.detail, buffer);
 
