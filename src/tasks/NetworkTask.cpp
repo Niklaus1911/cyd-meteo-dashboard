@@ -423,8 +423,6 @@ void parseTelemetryMessage(const MqttInboundMessage& message) {
     return;
   }
 
-  AppStateStore::recordMqttReceive(message.receivedAtMs, 0);
-
   errno = 0;
   char* end = nullptr;
   const float value = strtof(message.payload, &end);
@@ -442,13 +440,16 @@ void parseTelemetryMessage(const MqttInboundMessage& message) {
     ++end;
   }
 
-  AppStateStore::updateSensorValue(sensorTopic->field, value, message.receivedAtMs, 0);
+  if (!AppStateStore::updateSensorValue(sensorTopic->field, value, message.receivedAtMs, 0)) {
+    LOG_TASK("failed to update AppState for ESPHome sensor label='%s'", sensorTopic->label);
+    return;
+  }
 
   if (s_systemEvents != nullptr) {
     xEventGroupSetBits(s_systemEvents, AppEvents::AppStateUpdated);
   }
 
-  LOG_TASK("ESPHome sensor updated label='%s' value=%.3f received_at_ms=%lu",
+  LOG_TASK("ESPHome sensor updated label='%s' value=%.3f received_at_ms=%lu telemetry_stale=0",
            sensorTopic->label,
            value,
            static_cast<unsigned long>(message.receivedAtMs));
@@ -470,14 +471,16 @@ void updateTelemetryStaleState(uint32_t nowMs) {
     return;
   }
 
-  if (!snapshot.latestSensor.valid || snapshot.latestSensor.stale) {
+  if (!snapshot.latestSensor.valid || snapshot.latestSensor.stale ||
+      snapshot.lastMqttReceiveMs == 0) {
     return;
   }
 
-  if (nowMs - snapshot.lastMqttReceiveMs >= AppConfig::TelemetryStaleAfterMs) {
+  const uint32_t telemetryAgeMs = static_cast<uint32_t>(nowMs - snapshot.lastMqttReceiveMs);
+  if (telemetryAgeMs >= AppConfig::TelemetryStaleAfterMs) {
     AppStateStore::setTelemetryStale(true, 0);
-    LOG_TASK("telemetry marked stale after %lu ms last_receive_ms=%lu valid=%d stale=1",
-             static_cast<unsigned long>(AppConfig::TelemetryStaleAfterMs),
+    LOG_TASK("telemetry marked stale age_ms=%lu last_receive_ms=%lu valid=%d stale=1",
+             static_cast<unsigned long>(telemetryAgeMs),
              static_cast<unsigned long>(snapshot.lastMqttReceiveMs),
              snapshot.latestSensor.valid);
   }
@@ -578,7 +581,7 @@ void networkTaskMain(void*) {
     maintainWifi(nowMs);
     maintainMqtt(nowMs);
     processInboundMqtt();
-    updateTelemetryStaleState(nowMs);
+    updateTelemetryStaleState(millis());
     drainCommandQueue();
     logRuntimeDiagnostics(nowMs);
     logStackHighWaterMark(nowMs);
