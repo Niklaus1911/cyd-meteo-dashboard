@@ -26,6 +26,8 @@ constexpr uint32_t DiagnosticLogPeriodMs = 30000;
 constexpr uint32_t StackLogPeriodMs = 30000;
 constexpr uint32_t RssiUpdatePeriodMs = 10000;
 constexpr uint32_t HeapUpdatePeriodMs = 30000;
+constexpr uint32_t LvglPerfLogPeriodMs = 10000;
+constexpr uint16_t LvglDrawBufferLines = 20;
 
 constexpr uint8_t CommandQueueLength = 8;
 constexpr uint8_t MqttInboundQueueLength = 6;
