@@ -80,11 +80,11 @@ lv_obj_t* createCard(lv_obj_t* parent,
 lv_obj_t* createBadge(lv_obj_t* parent, lv_coord_t x, lv_coord_t y, lv_coord_t width) {
   lv_obj_t* badge = lv_label_create(parent);
   lv_obj_set_pos(badge, x, y);
-  lv_obj_set_size(badge, width, 22);
+  lv_obj_set_size(badge, width, 20);
   lv_label_set_long_mode(badge, LV_LABEL_LONG_CLIP);
-  lv_obj_set_style_radius(badge, 6, 0);
+  lv_obj_set_style_radius(badge, 5, 0);
   lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
-  lv_obj_set_style_pad_top(badge, 4, 0);
+  lv_obj_set_style_pad_top(badge, 3, 0);
   lv_obj_set_style_text_align(badge, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_font(badge, &lv_font_montserrat_12, 0);
   return badge;
@@ -198,49 +198,60 @@ void create() {
   lv_obj_set_style_text_color(screen, lv_color_hex(ColorText), 0);
 
   s_title = createLabel(screen,
-                        "Meteo Dashboard",
+                        "ESP Meteo",
                         &lv_font_montserrat_16,
                         ColorText,
                         8,
-                        8,
-                        158);
+                        6,
+                        110);
 
-  s_wifiBadge = createBadge(screen, 172, 6, 66);
-  s_mqttBadge = createBadge(screen, 244, 6, 68);
-  s_statusBadge = createBadge(screen, 8, 34, 84);
+  s_wifiBadge = createBadge(screen, 128, 5, 84);
+  s_mqttBadge = createBadge(screen, 220, 5, 92);
+  s_statusBadge = createBadge(screen, 8, 30, 76);
 
   s_age = createLabel(screen,
-                      "last update --",
+                      "age --",
                       &lv_font_montserrat_12,
                       ColorMuted,
-                      100,
-                      38,
-                      210);
-  lv_obj_set_style_text_align(s_age, LV_TEXT_ALIGN_RIGHT, 0);
+                      92,
+                      34,
+                      124);
 
-  s_temperature = createMetricCard(screen, "TEMP", 8, 60, 126, 64, false, false, ColorCyan);
-  s_humidity = createMetricCard(screen, "HUMID", 140, 60, 82, 62, false, false, ColorBlue);
-  s_pressure = createMetricCard(screen, "PRESS", 228, 60, 84, 62, false, false, ColorPurple);
-  s_solar = createMetricCard(screen, "SOLAR", 8, 130, 176, 80, false, false, ColorAmber);
-  s_battery = createMetricCard(screen, "BATTERY", 190, 130, 122, 80, false, false, ColorGreen);
+  s_temperature = createMetricCard(screen, "TEMP", 8, 53, 118, 68, true, false, ColorCyan);
+  s_humidity = createMetricCard(screen, "HUMID", 132, 53, 82, 68, false, false, ColorBlue);
+  s_pressure = createMetricCard(screen, "PRESS", 220, 53, 92, 68, false, false, ColorPurple);
+  s_solar = createMetricCard(screen, "SOLAR", 8, 128, 190, 104, false, false, ColorAmber);
+  s_battery = createMetricCard(screen, "BATTERY", 204, 128, 108, 104, false, false, ColorGreen);
 
-  lv_obj_set_width(s_temperature.value, 110);
-  lv_obj_set_pos(s_temperature.value, CardPad, 29);
+  lv_obj_set_width(s_temperature.value, 102);
+  lv_obj_set_pos(s_temperature.value, CardPad, 28);
+  lv_obj_set_width(s_temperature.detail, 102);
+  lv_obj_set_pos(s_temperature.detail, CardPad, 52);
 
-  lv_obj_set_width(s_solar.value, 160);
-  lv_obj_set_pos(s_solar.value, CardPad, 28);
-  lv_obj_set_style_text_font(s_solar.value, &lv_font_montserrat_16, 0);
-  lv_obj_set_pos(s_solar.detail, CardPad, 52);
-  lv_obj_set_width(s_solar.detail, 160);
-  lv_obj_set_style_text_font(s_solar.detail, &lv_font_montserrat_16, 0);
+  lv_obj_set_width(s_humidity.value, 66);
+  lv_obj_set_pos(s_humidity.value, CardPad, 31);
+
+  lv_obj_set_width(s_pressure.value, 76);
+  lv_obj_set_pos(s_pressure.value, CardPad, 31);
+  lv_obj_set_width(s_pressure.detail, 76);
+  lv_obj_set_pos(s_pressure.detail, CardPad, 52);
+
+  lv_obj_set_width(s_solar.value, 174);
+  lv_obj_set_pos(s_solar.value, CardPad, 34);
+  lv_obj_set_style_text_font(s_solar.value, &lv_font_montserrat_20, 0);
+  lv_obj_set_pos(s_solar.detail, CardPad, 66);
+  lv_obj_set_width(s_solar.detail, 174);
+  lv_obj_set_style_text_font(s_solar.detail, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(s_solar.detail, lv_color_hex(ColorAmber), 0);
 
-  lv_obj_set_pos(s_battery.detail, CardPad, 50);
-  lv_obj_set_width(s_battery.value, 106);
+  lv_obj_set_pos(s_battery.value, CardPad, 35);
+  lv_obj_set_width(s_battery.value, 92);
+  lv_obj_set_pos(s_battery.detail, CardPad, 78);
+  lv_obj_set_width(s_battery.detail, 92);
 
   s_battery.bar = lv_bar_create(s_battery.card);
-  lv_obj_set_pos(s_battery.bar, CardPad, 64);
-  lv_obj_set_size(s_battery.bar, 106, 6);
+  lv_obj_set_pos(s_battery.bar, CardPad, 66);
+  lv_obj_set_size(s_battery.bar, 92, 7);
   lv_bar_set_range(s_battery.bar, 0, 100);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(0x263241), 0);
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(ColorGreen), LV_PART_INDICATOR);
@@ -251,10 +262,10 @@ void create() {
                          "uptime --",
                          &lv_font_montserrat_12,
                          ColorMuted,
-                         8,
-                         220,
-                         304);
-  lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_CENTER, 0);
+                         224,
+                         34,
+                         88);
+  lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_RIGHT, 0);
 
   setBadge(s_wifiBadge, "WiFi --", 0x233041, ColorMuted);
   setBadge(s_mqttBadge, "MQTT --", 0x233041, ColorMuted);
@@ -285,9 +296,9 @@ void update(const AppState& state) {
 
   const uint32_t ageMs = lastUpdateAgeMs(state);
   if (state.lastMqttReceiveMs == 0) {
-    snprintf(buffer, sizeof(buffer), "last update --");
+    snprintf(buffer, sizeof(buffer), "age --");
   } else {
-    snprintf(buffer, sizeof(buffer), "last update %lus", static_cast<unsigned long>(ageMs / 1000UL));
+    snprintf(buffer, sizeof(buffer), "age %lus", static_cast<unsigned long>(ageMs / 1000UL));
   }
   setLabel(s_age, buffer);
 
@@ -342,7 +353,7 @@ void update(const AppState& state) {
 
   snprintf(buffer,
            sizeof(buffer),
-           "uptime %lus",
+           "up %lus",
            static_cast<unsigned long>(state.uptimeMs / 1000UL));
   setLabel(s_footer, buffer);
 }
