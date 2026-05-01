@@ -41,6 +41,12 @@ constexpr const char* EspHomeSolarPanelCurrentTopic = "esp-c3-meteo-v2/sensor/so
 constexpr const char* EspHomeOutsideHumidityTopic = "esp-c3-meteo-v2/sensor/outside_humidity/state";
 constexpr const char* EspHomeAbsolutePressureTopic = "esp-c3-meteo-v2/sensor/absolute_pressure/state";
 
+constexpr const char* ForecastRegionTopic = "home/cyd/zambretti/region";
+constexpr const char* ForecastAlertTopic = "home/cyd/zambretti/alert";
+constexpr const char* ForecastTextTopic = "home/cyd/zambretti/forecast";
+constexpr const char* ForecastLowSummaryTopic = "home/cyd/zambretti/low_summary";
+constexpr const char* ForecastUpdatedTopic = "home/cyd/zambretti/updated";
+
 constexpr uint32_t SensorExpectedUpdateIntervalMs = 10UL * 60UL * 1000UL;
 
 constexpr uint32_t WifiReconnectIntervalMs = 10000;
@@ -63,5 +69,11 @@ constexpr size_t MqttHostMaxLength = 64;
 constexpr size_t MqttUserMaxLength = 48;
 constexpr size_t MqttPasswordMaxLength = 64;
 constexpr uint16_t DefaultMqttPort = 1883;
+
+constexpr size_t ForecastRegionMaxLength = 48;
+constexpr size_t ForecastAlertMaxLength = 96;
+constexpr size_t ForecastTextMaxLength = 256;
+constexpr size_t ForecastLowSummaryMaxLength = 384;
+constexpr size_t ForecastUpdatedMaxLength = 24;
 
 }  // namespace AppConfig

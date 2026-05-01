@@ -375,10 +375,34 @@ constexpr EspHomeSensorTopic EspHomeSensorTopics[] = {
     {AppConfig::EspHomeAbsolutePressureTopic, SensorField::AbsolutePressurehPa, "absolute_pressure"},
 };
 
+struct ForecastTopic {
+  const char* topic;
+  ForecastField field;
+  const char* label;
+};
+
+constexpr ForecastTopic ForecastTopics[] = {
+    {AppConfig::ForecastRegionTopic, ForecastField::Region, "region"},
+    {AppConfig::ForecastAlertTopic, ForecastField::Alert, "alert"},
+    {AppConfig::ForecastTextTopic, ForecastField::Text, "forecast"},
+    {AppConfig::ForecastLowSummaryTopic, ForecastField::LowSummary, "low_summary"},
+    {AppConfig::ForecastUpdatedTopic, ForecastField::Updated, "updated"},
+};
+
 const EspHomeSensorTopic* findEspHomeSensorTopic(const char* topic) {
   for (const EspHomeSensorTopic& sensorTopic : EspHomeSensorTopics) {
     if (strcmp(topic, sensorTopic.topic) == 0) {
       return &sensorTopic;
+    }
+  }
+
+  return nullptr;
+}
+
+const ForecastTopic* findForecastTopic(const char* topic) {
+  for (const ForecastTopic& forecastTopic : ForecastTopics) {
+    if (strcmp(topic, forecastTopic.topic) == 0) {
+      return &forecastTopic;
     }
   }
 
@@ -393,6 +417,21 @@ bool subscribeEspHomeTopics() {
       LOG_TASK("subscribed ESPHome topic='%s'", sensorTopic.topic);
     } else {
       LOG_TASK("failed to subscribe ESPHome topic='%s'", sensorTopic.topic);
+      allSubscribed = false;
+    }
+  }
+
+  return allSubscribed;
+}
+
+bool subscribeForecastTopics() {
+  bool allSubscribed = true;
+
+  for (const ForecastTopic& forecastTopic : ForecastTopics) {
+    if (s_mqttClient.subscribe(forecastTopic.topic)) {
+      LOG_TASK("subscribed forecast topic='%s'", forecastTopic.topic);
+    } else {
+      LOG_TASK("failed to subscribe forecast topic='%s'", forecastTopic.topic);
       allSubscribed = false;
     }
   }
@@ -496,9 +535,31 @@ void maintainMqtt(uint32_t nowMs) {
            mqttStateReason(s_mqttClient.state()));
 
   subscribeEspHomeTopics();
+  subscribeForecastTopics();
 }
 
 void parseTelemetryMessage(const MqttInboundMessage& message) {
+  const ForecastTopic* forecastTopic = findForecastTopic(message.topic);
+  if (forecastTopic != nullptr) {
+    if (!AppStateStore::updateForecastValue(forecastTopic->field,
+                                            message.payload,
+                                            message.receivedAtMs,
+                                            0)) {
+      LOG_TASK("failed to update AppState for forecast label='%s'", forecastTopic->label);
+      return;
+    }
+
+    if (s_systemEvents != nullptr) {
+      xEventGroupSetBits(s_systemEvents, AppEvents::AppStateUpdated);
+    }
+
+    LOG_TASK("forecast updated label='%s' received_at_ms=%lu payload_len=%lu",
+             forecastTopic->label,
+             static_cast<unsigned long>(message.receivedAtMs),
+             static_cast<unsigned long>(message.payloadLength));
+    return;
+  }
+
   const EspHomeSensorTopic* sensorTopic = findEspHomeSensorTopic(message.topic);
   if (sensorTopic == nullptr) {
     LOG_TASK("ignored unknown MQTT topic='%s'", message.topic);

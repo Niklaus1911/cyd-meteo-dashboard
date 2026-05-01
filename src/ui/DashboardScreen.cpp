@@ -37,6 +37,7 @@ enum class Page : uint8_t {
   Settings,
   ResetConfirm,
   Resetting,
+  Forecast,
 };
 
 QueueHandle_t s_commandQueue = nullptr;
@@ -45,6 +46,7 @@ lv_obj_t* s_dashboardPage = nullptr;
 lv_obj_t* s_settingsPage = nullptr;
 lv_obj_t* s_confirmPage = nullptr;
 lv_obj_t* s_resettingPage = nullptr;
+lv_obj_t* s_forecastPage = nullptr;
 
 lv_obj_t* s_wifiBadge = nullptr;
 lv_obj_t* s_mqttBadge = nullptr;
@@ -52,6 +54,7 @@ lv_obj_t* s_statusBadge = nullptr;
 lv_obj_t* s_age = nullptr;
 lv_obj_t* s_footer = nullptr;
 lv_obj_t* s_gearButton = nullptr;
+lv_obj_t* s_forecastButton = nullptr;
 
 lv_obj_t* s_settingsWifi = nullptr;
 lv_obj_t* s_settingsMqtt = nullptr;
@@ -65,6 +68,13 @@ lv_obj_t* s_settingsHeap = nullptr;
 lv_obj_t* s_eraseButton = nullptr;
 lv_obj_t* s_resettingTitle = nullptr;
 lv_obj_t* s_resettingDetail = nullptr;
+lv_obj_t* s_forecastContent = nullptr;
+lv_obj_t* s_forecastNoData = nullptr;
+lv_obj_t* s_forecastRegion = nullptr;
+lv_obj_t* s_forecastAlert = nullptr;
+lv_obj_t* s_forecastUpdated = nullptr;
+lv_obj_t* s_forecastText = nullptr;
+lv_obj_t* s_forecastLowSummary = nullptr;
 
 MetricCard s_temperature;
 MetricCard s_humidity;
@@ -83,6 +93,20 @@ lv_obj_t* createLabel(lv_obj_t* parent,
   lv_label_set_text(label, text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
   lv_obj_set_pos(label, x, y);
+  lv_obj_set_width(label, width);
+  lv_obj_set_style_text_font(label, font, 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
+  return label;
+}
+
+lv_obj_t* createWrappedLabel(lv_obj_t* parent,
+                             const char* text,
+                             const lv_font_t* font,
+                             uint32_t color,
+                             lv_coord_t width) {
+  lv_obj_t* label = lv_label_create(parent);
+  lv_label_set_text(label, text);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(label, width);
   lv_obj_set_style_text_font(label, font, 0);
   lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
@@ -214,6 +238,18 @@ void setLabel(lv_obj_t* label, const char* text) {
   }
 }
 
+void setHidden(lv_obj_t* object, bool hidden) {
+  if (object == nullptr) {
+    return;
+  }
+
+  if (hidden) {
+    lv_obj_add_flag(object, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_clear_flag(object, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
 void setBadge(lv_obj_t* badge, const char* text, uint32_t bgColor, uint32_t textColor = ColorText) {
   if (badge == nullptr) {
     return;
@@ -237,6 +273,9 @@ void showPage(Page page) {
   if (s_resettingPage != nullptr) {
     lv_obj_add_flag(s_resettingPage, LV_OBJ_FLAG_HIDDEN);
   }
+  if (s_forecastPage != nullptr) {
+    lv_obj_add_flag(s_forecastPage, LV_OBJ_FLAG_HIDDEN);
+  }
 
   lv_obj_t* visiblePage = nullptr;
   switch (page) {
@@ -251,6 +290,9 @@ void showPage(Page page) {
       break;
     case Page::Resetting:
       visiblePage = s_resettingPage;
+      break;
+    case Page::Forecast:
+      visiblePage = s_forecastPage;
       break;
   }
 
@@ -278,6 +320,16 @@ void onGearButton(lv_event_t* event) {
   } else if (code == LV_EVENT_RELEASED) {
     LOG_TASK("opening settings screen");
     showPage(Page::Settings);
+  }
+}
+
+void onForecastButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_RELEASED) {
+    if (s_forecastContent != nullptr) {
+      lv_obj_scroll_to_y(s_forecastContent, 0, LV_ANIM_OFF);
+    }
+    showPage(Page::Forecast);
   }
 }
 
@@ -407,6 +459,24 @@ void updateBatteryBar(const AppState& state) {
                             LV_PART_INDICATOR);
 }
 
+void setForecastDetailsVisible(bool visible) {
+  setHidden(s_forecastRegion, !visible);
+  setHidden(s_forecastAlert, !visible);
+  setHidden(s_forecastUpdated, !visible);
+  setHidden(s_forecastText, !visible);
+  setHidden(s_forecastLowSummary, !visible);
+}
+
+void setPrefixedForecastLabel(lv_obj_t* label,
+                              const char* prefix,
+                              const char* value,
+                              const char* fallback) {
+  char buffer[448] = {};
+  const char* displayValue = value != nullptr && value[0] != '\0' ? value : fallback;
+  snprintf(buffer, sizeof(buffer), "%s%s", prefix, displayValue);
+  setLabel(label, buffer);
+}
+
 }  // namespace
 
 namespace DashboardScreen {
@@ -423,6 +493,7 @@ void create(QueueHandle_t commandQueue) {
   s_settingsPage = createPage(screen);
   s_confirmPage = createPage(screen);
   s_resettingPage = createPage(screen);
+  s_forecastPage = createPage(screen);
 
   createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 88);
 
@@ -495,6 +566,9 @@ void create(QueueHandle_t commandQueue) {
   lv_obj_set_style_radius(s_battery.bar, 3, 0);
   lv_obj_set_style_radius(s_battery.bar, 3, LV_PART_INDICATOR);
 
+  s_forecastButton = createButton(s_dashboardPage, "FCST", 228, 194, 78, 28, onForecastButton, ColorPanelAlt);
+  lv_obj_move_foreground(s_forecastButton);
+
   s_footer = createLabel(s_dashboardPage,
                          "uptime --",
                          &lv_font_montserrat_12,
@@ -561,6 +635,58 @@ void create(QueueHandle_t commandQueue) {
                                   124,
                                   252);
   lv_obj_set_style_text_align(s_resettingDetail, LV_TEXT_ALIGN_CENTER, 0);
+
+  createLabel(s_forecastPage, "Forecast", &lv_font_montserrat_20, ColorText, 8, 10, 160);
+  createButton(s_forecastPage, "BACK", 220, 8, 92, 40, onBackButton, ColorPanel);
+
+  s_forecastContent = lv_obj_create(s_forecastPage);
+  lv_obj_set_pos(s_forecastContent, 0, 50);
+  lv_obj_set_size(s_forecastContent, 320, 190);
+  lv_obj_set_scroll_dir(s_forecastContent, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(s_forecastContent, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_set_style_bg_color(s_forecastContent, lv_color_hex(ColorBg), 0);
+  lv_obj_set_style_bg_opa(s_forecastContent, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(s_forecastContent, 0, 0);
+  lv_obj_set_style_radius(s_forecastContent, 0, 0);
+  lv_obj_set_style_pad_left(s_forecastContent, 12, 0);
+  lv_obj_set_style_pad_right(s_forecastContent, 12, 0);
+  lv_obj_set_style_pad_top(s_forecastContent, 8, 0);
+  lv_obj_set_style_pad_bottom(s_forecastContent, 12, 0);
+  lv_obj_set_style_pad_row(s_forecastContent, 8, 0);
+  lv_obj_set_layout(s_forecastContent, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(s_forecastContent, LV_FLEX_FLOW_COLUMN);
+
+  s_forecastNoData = createWrappedLabel(s_forecastContent,
+                                        "No forecast data",
+                                        &lv_font_montserrat_14,
+                                        ColorMuted,
+                                        292);
+  s_forecastRegion = createWrappedLabel(s_forecastContent,
+                                        "Region: --",
+                                        &lv_font_montserrat_12,
+                                        ColorText,
+                                        292);
+  s_forecastAlert = createWrappedLabel(s_forecastContent,
+                                       "Alert: --",
+                                       &lv_font_montserrat_12,
+                                       ColorAmber,
+                                       292);
+  s_forecastUpdated = createWrappedLabel(s_forecastContent,
+                                         "Updated: --",
+                                         &lv_font_montserrat_12,
+                                         ColorMuted,
+                                         292);
+  s_forecastText = createWrappedLabel(s_forecastContent,
+                                      "Forecast:\n--",
+                                      &lv_font_montserrat_12,
+                                      ColorText,
+                                      292);
+  s_forecastLowSummary = createWrappedLabel(s_forecastContent,
+                                            "Low pressure:\n--",
+                                            &lv_font_montserrat_12,
+                                            ColorMuted,
+                                            292);
+  setForecastDetailsVisible(false);
 
   showPage(Page::Dashboard);
 }
@@ -632,6 +758,22 @@ void update(const AppState& state) {
                         "Stale:",
                         AppConfig::TelemetryStaleAfterMs);
   setLabel(s_settingsStale, buffer);
+
+  if (!state.forecastValid) {
+    setHidden(s_forecastNoData, false);
+    setForecastDetailsVisible(false);
+  } else {
+    setHidden(s_forecastNoData, true);
+    setForecastDetailsVisible(true);
+    setPrefixedForecastLabel(s_forecastRegion, "Region: ", state.forecastRegion, "--");
+    setPrefixedForecastLabel(s_forecastAlert, "Alert: ", state.forecastAlert, "--");
+    setPrefixedForecastLabel(s_forecastUpdated, "Updated: ", state.forecastUpdated, "--");
+    setPrefixedForecastLabel(s_forecastText, "Forecast:\n", state.forecastText, "--");
+    setPrefixedForecastLabel(s_forecastLowSummary,
+                             "Low pressure:\n",
+                             state.forecastLowSummary,
+                             "--");
+  }
 
   if (state.credentialResetRequested || state.credentialResetting || state.credentialRebooting) {
     setLabel(s_resettingTitle, state.credentialResetting ? "Resetting..." : "Reset requested");

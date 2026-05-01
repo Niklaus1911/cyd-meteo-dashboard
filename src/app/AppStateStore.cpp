@@ -198,6 +198,43 @@ bool updateSensorValue(SensorField field,
   return true;
 }
 
+bool updateForecastValue(ForecastField field,
+                         const char* value,
+                         uint32_t updateMs,
+                         TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  switch (field) {
+    case ForecastField::Region:
+      copyString(s_state.forecastRegion, sizeof(s_state.forecastRegion), value);
+      break;
+    case ForecastField::Alert:
+      copyString(s_state.forecastAlert, sizeof(s_state.forecastAlert), value);
+      break;
+    case ForecastField::Text:
+      copyString(s_state.forecastText, sizeof(s_state.forecastText), value);
+      break;
+    case ForecastField::LowSummary:
+      copyString(s_state.forecastLowSummary, sizeof(s_state.forecastLowSummary), value);
+      break;
+    case ForecastField::Updated:
+      copyString(s_state.forecastUpdated, sizeof(s_state.forecastUpdated), value);
+      break;
+  }
+
+  s_state.forecastValid = true;
+  s_state.forecastLastReceiveMs = updateMs;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
 bool setTelemetryStale(bool stale, TickType_t timeoutTicks) {
   if (s_mutex == nullptr) {
     return false;

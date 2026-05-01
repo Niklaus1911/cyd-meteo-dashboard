@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "AppConfig.h"
+
 enum class SensorField : uint8_t {
   BatteryPercent,
   OutsideTemperatureC,
@@ -9,6 +11,14 @@ enum class SensorField : uint8_t {
   SolarPanelCurrentmA,
   OutsideHumidityPercent,
   AbsolutePressurehPa,
+};
+
+enum class ForecastField : uint8_t {
+  Region,
+  Alert,
+  Text,
+  LowSummary,
+  Updated,
 };
 
 struct SensorTelemetry {
@@ -52,4 +62,12 @@ struct AppState {
   uint32_t lastMqttReceiveMs = 0;
   uint32_t uptimeMs = 0;
   uint32_t freeHeapBytes = 0;
+
+  bool forecastValid = false;
+  char forecastRegion[AppConfig::ForecastRegionMaxLength] = {};
+  char forecastAlert[AppConfig::ForecastAlertMaxLength] = {};
+  char forecastText[AppConfig::ForecastTextMaxLength] = {};
+  char forecastLowSummary[AppConfig::ForecastLowSummaryMaxLength] = {};
+  char forecastUpdated[AppConfig::ForecastUpdatedMaxLength] = {};
+  uint32_t forecastLastReceiveMs = 0;
 };
