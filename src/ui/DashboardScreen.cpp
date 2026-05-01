@@ -396,22 +396,22 @@ void create(QueueHandle_t commandQueue) {
   s_confirmPage = createPage(screen);
   s_resettingPage = createPage(screen);
 
-  createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 88);
+  createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 82);
 
-  s_wifiBadge = createBadge(s_dashboardPage, 104, 5, 72);
-  s_mqttBadge = createBadge(s_dashboardPage, 182, 5, 94);
+  s_wifiBadge = createBadge(s_dashboardPage, 98, 5, 72);
+  s_mqttBadge = createBadge(s_dashboardPage, 176, 5, 104);
   s_gearButton = createButton(s_dashboardPage,
 #if defined(LV_SYMBOL_SETTINGS)
                               LV_SYMBOL_SETTINGS,
 #else
                               "SET",
 #endif
-                              284,
-                              196,
+                              288,
+                              2,
                               30,
                               30,
                               nullptr,
-                              ColorPanelAlt);
+                              ColorPanel);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
   lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_ALL, nullptr);
 
@@ -424,6 +424,7 @@ void create(QueueHandle_t commandQueue) {
                       94,
                       33,
                       116);
+  lv_obj_move_foreground(s_gearButton);
 
   s_temperature = createMetricCard(s_dashboardPage, "TEMP", 8, 53, 118, 68, true, ColorCyan);
   s_humidity = createMetricCard(s_dashboardPage, "HUMID", 132, 53, 82, 68, false, ColorBlue);
@@ -465,7 +466,6 @@ void create(QueueHandle_t commandQueue) {
   lv_obj_set_style_bg_color(s_battery.bar, lv_color_hex(ColorGreen), LV_PART_INDICATOR);
   lv_obj_set_style_radius(s_battery.bar, 3, 0);
   lv_obj_set_style_radius(s_battery.bar, 3, LV_PART_INDICATOR);
-  lv_obj_move_foreground(s_gearButton);
 
   s_footer = createLabel(s_dashboardPage,
                          "uptime --",

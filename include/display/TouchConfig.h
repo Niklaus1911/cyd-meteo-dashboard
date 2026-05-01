@@ -31,8 +31,6 @@ constexpr bool InvertY = false;
 
 constexpr uint16_t MinPressure = 200;
 constexpr uint8_t SampleCount = 3;
-constexpr int16_t StableRadiusPx = 2;
-constexpr int16_t MaxPressedJumpPx = 48;
 
 constexpr bool DebugLogTouches = false;
 constexpr uint32_t DebugLogPeriodMs = 250;

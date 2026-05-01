@@ -27,7 +27,6 @@ uint16_t s_screenHeight = 240;
 lv_point_t s_lastPoint = {0, 0};
 uint32_t s_lastDebugLogMs = 0;
 bool s_initialized = false;
-bool s_wasPressed = false;
 
 int16_t mapAxis(int32_t raw, int32_t rawMin, int32_t rawMax, uint16_t outputSize, bool invert) {
   if (outputSize == 0 || rawMin == rawMax) {
@@ -101,25 +100,6 @@ bool readAveragedRawPoint(TS_Point& averagePoint) {
   return true;
 }
 
-lv_point_t filterMappedPoint(const lv_point_t& point) {
-  if (!s_wasPressed) {
-    return point;
-  }
-
-  const int16_t dx = point.x - s_lastPoint.x;
-  const int16_t dy = point.y - s_lastPoint.y;
-
-  if (abs(dx) <= TouchConfig::StableRadiusPx && abs(dy) <= TouchConfig::StableRadiusPx) {
-    return s_lastPoint;
-  }
-
-  if (abs(dx) > TouchConfig::MaxPressedJumpPx || abs(dy) > TouchConfig::MaxPressedJumpPx) {
-    return s_lastPoint;
-  }
-
-  return point;
-}
-
 void updateDebugOverlay(const TS_Point& rawPoint, const lv_point_t& point, bool pressed) {
   if (!TouchConfig::ShowTouchDebugOverlay || s_debugDot == nullptr ||
       s_debugLabel == nullptr) {
@@ -172,15 +152,13 @@ void logTouchPoint(const TS_Point& rawPoint, const lv_point_t& point) {
 void readTouch(lv_indev_drv_t*, lv_indev_data_t* data) {
   TS_Point rawPoint;
   if (!s_initialized || !s_touch.touched() || !readAveragedRawPoint(rawPoint)) {
-    s_wasPressed = false;
     updateDebugOverlay(rawPoint, s_lastPoint, false);
     data->state = LV_INDEV_STATE_REL;
     data->point = s_lastPoint;
     return;
   }
 
-  s_lastPoint = filterMappedPoint(mapTouchPoint(rawPoint));
-  s_wasPressed = true;
+  s_lastPoint = mapTouchPoint(rawPoint);
 
   data->state = LV_INDEV_STATE_PR;
   data->point = s_lastPoint;
