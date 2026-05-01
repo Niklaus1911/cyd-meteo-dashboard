@@ -4,7 +4,9 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
 
+#include <cstdlib>
 #include <cstring>
 
 #include "AppConfig.h"
@@ -12,6 +14,7 @@
 #include "AppQueues.h"
 #include "Log.h"
 #include "app/AppStateStore.h"
+#include "app/MqttSettings.h"
 
 namespace {
 
@@ -21,15 +24,14 @@ QueueHandle_t s_mqttInboundQueue = nullptr;
 
 WiFiClient s_wifiClient;
 PubSubClient s_mqttClient(s_wifiClient);
+MqttSettings s_mqttSettings;
 
 uint32_t s_lastWifiAttemptMs = 0;
 uint32_t s_lastMqttAttemptMs = 0;
+uint32_t s_lastIncompleteMqttLogMs = 0;
 bool s_wifiWasConnected = false;
 bool s_mqttWasConnected = false;
-
-bool isPlaceholder(const char* value) {
-  return value == nullptr || value[0] == '\0' || value[0] == '[';
-}
+bool s_saveMqttSettingsRequested = false;
 
 void copyString(char* destination, size_t destinationSize, const char* source) {
   if (destinationSize == 0) {
@@ -65,6 +67,16 @@ void setMqttEvent(bool connected) {
   }
 }
 
+void onWiFiManagerSaveConfig() {
+  s_saveMqttSettingsRequested = true;
+}
+
+void onWiFiManagerConfigMode(WiFiManager* manager) {
+  LOG_TASK("config portal active ssid='%s' ip=%s",
+           manager->getConfigPortalSSID().c_str(),
+           WiFi.softAPIP().toString().c_str());
+}
+
 void mqttCallback(char* topic, uint8_t* payload, unsigned int length) {
   if (s_mqttInboundQueue == nullptr) {
     return;
@@ -84,17 +96,99 @@ void mqttCallback(char* topic, uint8_t* payload, unsigned int length) {
   }
 }
 
-void beginWifi(uint32_t nowMs) {
-  s_lastWifiAttemptMs = nowMs;
-
-  if (isPlaceholder(AppConfig::WifiSsid)) {
-    LOG_TASK("WiFi SSID is not configured; update AppConfig.h");
+void configureMqttClientServer() {
+  if (!s_mqttSettings.isComplete()) {
     return;
   }
 
-  LOG_TASK("connecting WiFi ssid='%s'", AppConfig::WifiSsid);
-  WiFi.disconnect(false, false);
-  WiFi.begin(AppConfig::WifiSsid, AppConfig::WifiPassword);
+  s_mqttClient.setServer(s_mqttSettings.host, s_mqttSettings.port);
+}
+
+void readPortalSettings(WiFiManagerParameter& host,
+                        WiFiManagerParameter& port,
+                        WiFiManagerParameter& username,
+                        WiFiManagerParameter& password,
+                        WiFiManagerParameter& topic) {
+  copyString(s_mqttSettings.host, sizeof(s_mqttSettings.host), host.getValue());
+  copyString(s_mqttSettings.username, sizeof(s_mqttSettings.username), username.getValue());
+  copyString(s_mqttSettings.password, sizeof(s_mqttSettings.password), password.getValue());
+  copyString(s_mqttSettings.telemetryTopic, sizeof(s_mqttSettings.telemetryTopic), topic.getValue());
+
+  const long parsedPort = strtol(port.getValue(), nullptr, 10);
+  if (parsedPort > 0 && parsedPort <= UINT16_MAX) {
+    s_mqttSettings.port = static_cast<uint16_t>(parsedPort);
+  } else {
+    s_mqttSettings.port = AppConfig::DefaultMqttPort;
+  }
+}
+
+bool runWiFiManager(uint32_t nowMs) {
+  s_lastWifiAttemptMs = nowMs;
+
+  char mqttPort[8] = {};
+  snprintf(mqttPort, sizeof(mqttPort), "%u", s_mqttSettings.port);
+
+  WiFiManagerParameter mqttHost("mqtt_host",
+                                "MQTT Broker",
+                                s_mqttSettings.host,
+                                sizeof(s_mqttSettings.host));
+  WiFiManagerParameter mqttPortParam("mqtt_port",
+                                     "MQTT Port",
+                                     mqttPort,
+                                     sizeof(mqttPort));
+  WiFiManagerParameter mqttUser("mqtt_user",
+                                "MQTT Username",
+                                s_mqttSettings.username,
+                                sizeof(s_mqttSettings.username));
+  WiFiManagerParameter mqttPass("mqtt_pass",
+                                "MQTT Password",
+                                s_mqttSettings.password,
+                                sizeof(s_mqttSettings.password),
+                                "type=\"password\"");
+  WiFiManagerParameter mqttTopic("mqtt_topic",
+                                 "Telemetry Topic",
+                                 s_mqttSettings.telemetryTopic,
+                                 sizeof(s_mqttSettings.telemetryTopic));
+
+  s_saveMqttSettingsRequested = false;
+
+  WiFiManager wifiManager;
+  wifiManager.setDebugOutput(false);
+  wifiManager.setConfigPortalTimeout(AppConfig::WifiManagerPortalTimeoutSec);
+  wifiManager.setConnectTimeout(20);
+  wifiManager.setSaveConfigCallback(onWiFiManagerSaveConfig);
+  wifiManager.setAPCallback(onWiFiManagerConfigMode);
+  wifiManager.addParameter(&mqttHost);
+  wifiManager.addParameter(&mqttPortParam);
+  wifiManager.addParameter(&mqttUser);
+  wifiManager.addParameter(&mqttPass);
+  wifiManager.addParameter(&mqttTopic);
+
+  LOG_TASK("starting WiFiManager auto-connect portal='%s'",
+           AppConfig::WifiManagerPortalSsid);
+
+  const bool connected = wifiManager.autoConnect(AppConfig::WifiManagerPortalSsid);
+
+  readPortalSettings(mqttHost, mqttPortParam, mqttUser, mqttPass, mqttTopic);
+
+  if (s_saveMqttSettingsRequested) {
+    if (MqttSettingsStore::save(s_mqttSettings)) {
+      LOG_TASK("saved MQTT settings to NVS");
+    } else {
+      LOG_TASK("failed to save MQTT settings to NVS");
+    }
+  }
+
+  configureMqttClientServer();
+
+  if (!connected) {
+    LOG_TASK("WiFiManager timed out or failed; will retry later");
+    WiFi.disconnect(false, false);
+    return false;
+  }
+
+  LOG_TASK("WiFiManager connected ip=%s", WiFi.localIP().toString().c_str());
+  return true;
 }
 
 void maintainWifi(uint32_t nowMs) {
@@ -102,7 +196,10 @@ void maintainWifi(uint32_t nowMs) {
 
   if (connected) {
     if (!s_wifiWasConnected) {
-      LOG_TASK("WiFi connected ip=%s rssi=%d", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      LOG_TASK("WiFi connected ssid='%s' ip=%s rssi=%d",
+               WiFi.SSID().c_str(),
+               WiFi.localIP().toString().c_str(),
+               WiFi.RSSI());
     }
 
     AppStateStore::setWifiStatus(true, WiFi.SSID().c_str(), WiFi.RSSI(), 0);
@@ -123,7 +220,7 @@ void maintainWifi(uint32_t nowMs) {
   s_mqttWasConnected = false;
 
   if (nowMs - s_lastWifiAttemptMs >= AppConfig::WifiReconnectIntervalMs) {
-    beginWifi(nowMs);
+    runWiFiManager(nowMs);
   }
 }
 
@@ -141,10 +238,10 @@ bool mqttConnectWithWill() {
   constexpr uint8_t willQos = 0;
   constexpr bool willRetain = true;
 
-  if (AppConfig::mqttCredentialsConfigured()) {
+  if (s_mqttSettings.hasCredentials()) {
     return s_mqttClient.connect(AppConfig::MqttClientId,
-                                AppConfig::MqttUsername,
-                                AppConfig::MqttPassword,
+                                s_mqttSettings.username,
+                                s_mqttSettings.password,
                                 willTopic,
                                 willQos,
                                 willRetain,
@@ -183,10 +280,10 @@ void maintainMqtt(uint32_t nowMs) {
   setMqttEvent(false);
   s_mqttWasConnected = false;
 
-  if (isPlaceholder(AppConfig::MqttHost) || isPlaceholder(AppConfig::MqttTelemetryTopic)) {
-    if (nowMs - s_lastMqttAttemptMs >= AppConfig::MqttReconnectIntervalMs) {
-      s_lastMqttAttemptMs = nowMs;
-      LOG_TASK("MQTT host/topic not configured; update AppConfig.h");
+  if (!s_mqttSettings.isComplete()) {
+    if (nowMs - s_lastIncompleteMqttLogMs >= AppConfig::StatusLogPeriodMs) {
+      s_lastIncompleteMqttLogMs = nowMs;
+      LOG_TASK("MQTT config incomplete; connect WiFi only until portal settings are saved");
     }
     return;
   }
@@ -196,7 +293,8 @@ void maintainMqtt(uint32_t nowMs) {
   }
 
   s_lastMqttAttemptMs = nowMs;
-  LOG_TASK("connecting MQTT broker=%s:%u", AppConfig::MqttHost, AppConfig::MqttPort);
+  configureMqttClientServer();
+  LOG_TASK("connecting MQTT broker=%s:%u", s_mqttSettings.host, s_mqttSettings.port);
 
   if (!mqttConnectWithWill()) {
     LOG_TASK("MQTT connect failed state=%d", s_mqttClient.state());
@@ -209,10 +307,10 @@ void maintainMqtt(uint32_t nowMs) {
 
   publishAvailability("online");
 
-  if (s_mqttClient.subscribe(AppConfig::MqttTelemetryTopic)) {
-    LOG_TASK("subscribed telemetry topic='%s'", AppConfig::MqttTelemetryTopic);
+  if (s_mqttClient.subscribe(s_mqttSettings.telemetryTopic)) {
+    LOG_TASK("subscribed telemetry topic='%s'", s_mqttSettings.telemetryTopic);
   } else {
-    LOG_TASK("failed to subscribe telemetry topic='%s'", AppConfig::MqttTelemetryTopic);
+    LOG_TASK("failed to subscribe telemetry topic='%s'", s_mqttSettings.telemetryTopic);
   }
 }
 
@@ -327,15 +425,21 @@ void drainCommandQueue() {
 void networkTaskMain(void*) {
   LOG_TASK("started");
 
+  if (MqttSettingsStore::load(s_mqttSettings)) {
+    LOG_TASK("loaded MQTT settings from NVS complete=%d", s_mqttSettings.isComplete());
+  } else {
+    LOG_TASK("failed to load MQTT settings from NVS; using defaults");
+  }
+
   WiFi.mode(WIFI_STA);
-  WiFi.persistent(false);
+  WiFi.persistent(true);
   WiFi.setAutoReconnect(true);
 
-  s_mqttClient.setServer(AppConfig::MqttHost, AppConfig::MqttPort);
   s_mqttClient.setCallback(mqttCallback);
   s_mqttClient.setBufferSize(AppConfig::MqttPayloadMaxLength);
   s_mqttClient.setKeepAlive(AppConfig::MqttKeepAliveSec);
   s_mqttClient.setSocketTimeout(AppConfig::MqttSocketTimeoutSec);
+  configureMqttClientServer();
 
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t lastStatusLogMs = 0;
@@ -343,7 +447,7 @@ void networkTaskMain(void*) {
   AppStateStore::setWifiStatus(false, "", 0);
   AppStateStore::setMqttStatus(false, AppConfig::MqttClientId);
 
-  beginWifi(millis());
+  runWiFiManager(millis());
 
   for (;;) {
     const uint32_t nowMs = millis();
