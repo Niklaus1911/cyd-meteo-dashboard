@@ -4,6 +4,7 @@
 #include <lvgl.h>
 
 #include "AppQueues.h"
+#include "Log.h"
 
 namespace {
 
@@ -128,6 +129,7 @@ lv_obj_t* createBadge(lv_obj_t* parent, lv_coord_t x, lv_coord_t y, lv_coord_t w
 }
 
 void styleButton(lv_obj_t* button, uint32_t color = ColorPanelAlt) {
+  lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(button, lv_color_hex(color), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
@@ -150,7 +152,9 @@ lv_obj_t* createButton(lv_obj_t* parent,
   lv_obj_set_pos(button, x, y);
   lv_obj_set_size(button, width, height);
   styleButton(button, color);
-  lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
+  if (callback != nullptr) {
+    lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, nullptr);
+  }
 
   lv_obj_t* label = lv_label_create(button);
   lv_label_set_text(label, text);
@@ -260,8 +264,16 @@ void sendResetCredentialsCommand() {
   xQueueSend(s_commandQueue, &command, 0);
 }
 
-void onGearButton(lv_event_t*) {
-  showPage(Page::Settings);
+void onGearButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("gear button pressed");
+  } else if (code == LV_EVENT_CLICKED) {
+    LOG_TASK("gear button clicked");
+  } else if (code == LV_EVENT_RELEASED) {
+    LOG_TASK("opening settings screen");
+    showPage(Page::Settings);
+  }
 }
 
 void onBackButton(lv_event_t*) {
@@ -368,13 +380,14 @@ void create(QueueHandle_t commandQueue) {
 #else
                               "SET",
 #endif
-                              284,
-                              2,
-                              28,
-                              28,
-                              onGearButton,
+                              280,
+                              0,
+                              40,
+                              38,
+                              nullptr,
                               ColorPanel);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
+  lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_ALL, nullptr);
 
   s_statusBadge = createBadge(s_dashboardPage, 8, 29, 76);
 
@@ -385,6 +398,7 @@ void create(QueueHandle_t commandQueue) {
                       94,
                       33,
                       116);
+  lv_obj_move_foreground(s_gearButton);
 
   s_temperature = createMetricCard(s_dashboardPage, "TEMP", 8, 53, 118, 68, true, ColorCyan);
   s_humidity = createMetricCard(s_dashboardPage, "HUMID", 132, 53, 82, 68, false, ColorBlue);
