@@ -406,10 +406,10 @@ void create(QueueHandle_t commandQueue) {
 #else
                               "SET",
 #endif
-                              280,
-                              0,
-                              40,
-                              38,
+                              284,
+                              2,
+                              28,
+                              28,
                               nullptr,
                               ColorPanel);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
