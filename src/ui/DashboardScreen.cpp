@@ -13,6 +13,8 @@ lv_obj_t* s_temperature = nullptr;
 lv_obj_t* s_humidity = nullptr;
 lv_obj_t* s_pressure = nullptr;
 lv_obj_t* s_battery = nullptr;
+lv_obj_t* s_solarVoltage = nullptr;
+lv_obj_t* s_solarCurrent = nullptr;
 lv_obj_t* s_footer = nullptr;
 
 void setLabel(lv_obj_t* label, const char* text) {
@@ -25,13 +27,19 @@ const char* yesNo(bool value) {
   return value ? "yes" : "no";
 }
 
-void formatFloatValue(char* buffer, size_t bufferSize, const char* label, float value, const char* suffix) {
-  if (isnan(value)) {
+void formatFloatValue(char* buffer,
+                      size_t bufferSize,
+                      const char* label,
+                      float value,
+                      bool valid,
+                      const char* suffix,
+                      uint8_t decimals = 1) {
+  if (!valid || isnan(value)) {
     snprintf(buffer, bufferSize, "%s --", label);
     return;
   }
 
-  snprintf(buffer, bufferSize, "%s %.1f %s", label, value, suffix);
+  snprintf(buffer, bufferSize, decimals == 0 ? "%s %.0f %s" : "%s %.1f %s", label, value, suffix);
 }
 
 }  // namespace
@@ -58,20 +66,28 @@ void create() {
   lv_obj_align(s_telemetry, LV_ALIGN_TOP_LEFT, 210, 38);
 
   s_temperature = lv_label_create(screen);
-  lv_obj_set_style_text_font(s_temperature, &lv_font_montserrat_16, 0);
-  lv_obj_align(s_temperature, LV_ALIGN_LEFT_MID, 12, -42);
+  lv_obj_set_style_text_font(s_temperature, &lv_font_montserrat_14, 0);
+  lv_obj_align(s_temperature, LV_ALIGN_LEFT_MID, 12, -60);
 
   s_humidity = lv_label_create(screen);
-  lv_obj_set_style_text_font(s_humidity, &lv_font_montserrat_16, 0);
-  lv_obj_align(s_humidity, LV_ALIGN_LEFT_MID, 12, -12);
+  lv_obj_set_style_text_font(s_humidity, &lv_font_montserrat_14, 0);
+  lv_obj_align(s_humidity, LV_ALIGN_LEFT_MID, 12, -34);
 
   s_pressure = lv_label_create(screen);
-  lv_obj_set_style_text_font(s_pressure, &lv_font_montserrat_16, 0);
-  lv_obj_align(s_pressure, LV_ALIGN_LEFT_MID, 12, 18);
+  lv_obj_set_style_text_font(s_pressure, &lv_font_montserrat_14, 0);
+  lv_obj_align(s_pressure, LV_ALIGN_LEFT_MID, 12, -8);
 
   s_battery = lv_label_create(screen);
-  lv_obj_set_style_text_font(s_battery, &lv_font_montserrat_16, 0);
-  lv_obj_align(s_battery, LV_ALIGN_LEFT_MID, 12, 48);
+  lv_obj_set_style_text_font(s_battery, &lv_font_montserrat_14, 0);
+  lv_obj_align(s_battery, LV_ALIGN_LEFT_MID, 12, 18);
+
+  s_solarVoltage = lv_label_create(screen);
+  lv_obj_set_style_text_font(s_solarVoltage, &lv_font_montserrat_14, 0);
+  lv_obj_align(s_solarVoltage, LV_ALIGN_LEFT_MID, 12, 44);
+
+  s_solarCurrent = lv_label_create(screen);
+  lv_obj_set_style_text_font(s_solarCurrent, &lv_font_montserrat_14, 0);
+  lv_obj_align(s_solarCurrent, LV_ALIGN_LEFT_MID, 12, 70);
 
   s_footer = lv_label_create(screen);
   lv_obj_set_style_text_color(s_footer, lv_color_hex(0x9FB3C8), 0);
@@ -90,25 +106,62 @@ void update(const AppState& state) {
   snprintf(buffer,
            sizeof(buffer),
            "Data %s",
-           state.latestSensor.valid ? (state.latestSensor.stale ? "stale" : "live") : "none");
+           state.latestSensor.valid ? (state.latestSensor.stale ? "STALE" : "LIVE") : "NO DATA");
   setLabel(s_telemetry, buffer);
 
-  formatFloatValue(buffer, sizeof(buffer), "Temp", state.latestSensor.temperatureC, "C");
+  formatFloatValue(buffer,
+                   sizeof(buffer),
+                   "Outside Temp",
+                   state.latestSensor.outsideTemperatureC,
+                   state.latestSensor.outsideTemperatureValid,
+                   "C");
   setLabel(s_temperature, buffer);
 
-  formatFloatValue(buffer, sizeof(buffer), "Humidity", state.latestSensor.humidityPct, "%");
+  formatFloatValue(buffer,
+                   sizeof(buffer),
+                   "Outside Humidity",
+                   state.latestSensor.outsideHumidityPercent,
+                   state.latestSensor.outsideHumidityValid,
+                   "%");
   setLabel(s_humidity, buffer);
 
-  formatFloatValue(buffer, sizeof(buffer), "Pressure", state.latestSensor.pressureHpa, "hPa");
+  formatFloatValue(buffer,
+                   sizeof(buffer),
+                   "Absolute Pressure",
+                   state.latestSensor.absolutePressurehPa,
+                   state.latestSensor.absolutePressureValid,
+                   "hPa");
   setLabel(s_pressure, buffer);
 
-  formatFloatValue(buffer, sizeof(buffer), "Battery", state.latestSensor.batteryPct, "%");
+  formatFloatValue(buffer,
+                   sizeof(buffer),
+                   "Battery",
+                   state.latestSensor.batteryPercent,
+                   state.latestSensor.batteryPercentValid,
+                   "%",
+                   0);
   setLabel(s_battery, buffer);
 
-  const uint32_t ageMs = state.lastTelemetryUpdateMs == 0 ? 0 : state.uptimeMs - state.lastTelemetryUpdateMs;
+  formatFloatValue(buffer,
+                   sizeof(buffer),
+                   "Solar Voltage",
+                   state.latestSensor.solarPanelVoltageV,
+                   state.latestSensor.solarPanelVoltageValid,
+                   "V");
+  setLabel(s_solarVoltage, buffer);
+
+  formatFloatValue(buffer,
+                   sizeof(buffer),
+                   "Solar Current",
+                   state.latestSensor.solarPanelCurrentmA,
+                   state.latestSensor.solarPanelCurrentValid,
+                   "mA");
+  setLabel(s_solarCurrent, buffer);
+
+  const uint32_t ageMs = state.lastMqttReceiveMs == 0 ? 0 : state.uptimeMs - state.lastMqttReceiveMs;
   snprintf(buffer,
            sizeof(buffer),
-           "uptime %lus  last telemetry %lus",
+           "uptime %lus  last update %lus",
            static_cast<unsigned long>(state.uptimeMs / 1000UL),
            static_cast<unsigned long>(ageMs / 1000UL));
   setLabel(s_footer, buffer);

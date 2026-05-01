@@ -1,11 +1,12 @@
 #include "tasks/NetworkTask.h"
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
 
+#include <cerrno>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 
@@ -78,13 +79,12 @@ const char* mqttStateReason(int state) {
 }
 
 void logMqttSettings(const char* prefix) {
-  LOG_TASK("%s MQTT settings complete=%d host='%s' port=%u user_set=%d topic='%s'",
+  LOG_TASK("%s MQTT settings complete=%d host='%s' port=%u user_set=%d",
            prefix,
            s_mqttSettings.isComplete(),
            s_mqttSettings.host,
            s_mqttSettings.port,
-           s_mqttSettings.hasCredentials(),
-           s_mqttSettings.telemetryTopic);
+           s_mqttSettings.hasCredentials());
 }
 
 void setWifiEvent(bool connected) {
@@ -150,12 +150,10 @@ void configureMqttClientServer() {
 void readPortalSettings(WiFiManagerParameter& host,
                         WiFiManagerParameter& port,
                         WiFiManagerParameter& username,
-                        WiFiManagerParameter& password,
-                        WiFiManagerParameter& topic) {
+                        WiFiManagerParameter& password) {
   copyString(s_mqttSettings.host, sizeof(s_mqttSettings.host), host.getValue());
   copyString(s_mqttSettings.username, sizeof(s_mqttSettings.username), username.getValue());
   copyString(s_mqttSettings.password, sizeof(s_mqttSettings.password), password.getValue());
-  copyString(s_mqttSettings.telemetryTopic, sizeof(s_mqttSettings.telemetryTopic), topic.getValue());
 
   const long parsedPort = strtol(port.getValue(), nullptr, 10);
   if (parsedPort > 0 && parsedPort <= UINT16_MAX) {
@@ -188,20 +186,15 @@ bool runWiFiManager(uint32_t nowMs) {
                                                             s_mqttSettings.password,
                                                             sizeof(s_mqttSettings.password),
                                                             "type=\"password\"");
-  WiFiManagerParameter* mqttTopic = new WiFiManagerParameter("mqtt_topic",
-                                                             "Telemetry Topic",
-                                                             s_mqttSettings.telemetryTopic,
-                                                             sizeof(s_mqttSettings.telemetryTopic));
 
   if (wifiManager == nullptr || mqttHost == nullptr || mqttPortParam == nullptr ||
-      mqttUser == nullptr || mqttPass == nullptr || mqttTopic == nullptr) {
+      mqttUser == nullptr || mqttPass == nullptr) {
     LOG_TASK("failed to allocate WiFiManager portal objects");
     delete wifiManager;
     delete mqttHost;
     delete mqttPortParam;
     delete mqttUser;
     delete mqttPass;
-    delete mqttTopic;
     return false;
   }
 
@@ -216,7 +209,6 @@ bool runWiFiManager(uint32_t nowMs) {
   wifiManager->addParameter(mqttPortParam);
   wifiManager->addParameter(mqttUser);
   wifiManager->addParameter(mqttPass);
-  wifiManager->addParameter(mqttTopic);
 
   LOG_TASK("starting WiFiManager auto-connect portal='%s'",
            AppConfig::WifiManagerPortalSsid);
@@ -227,14 +219,13 @@ bool runWiFiManager(uint32_t nowMs) {
   LOG_TASK("WiFiManager portal ended connected=%d", connected);
   logStackHighWaterMarkNow("after WiFiManager portal");
 
-  readPortalSettings(*mqttHost, *mqttPortParam, *mqttUser, *mqttPass, *mqttTopic);
+  readPortalSettings(*mqttHost, *mqttPortParam, *mqttUser, *mqttPass);
 
   delete wifiManager;
   delete mqttHost;
   delete mqttPortParam;
   delete mqttUser;
   delete mqttPass;
-  delete mqttTopic;
 
   if (s_saveMqttSettingsRequested) {
     if (MqttSettingsStore::save(s_mqttSettings)) {
@@ -322,6 +313,46 @@ bool mqttConnectWithWill() {
                               willMessage);
 }
 
+struct EspHomeSensorTopic {
+  const char* topic;
+  SensorField field;
+  const char* label;
+};
+
+constexpr EspHomeSensorTopic EspHomeSensorTopics[] = {
+    {AppConfig::EspHomeBatteryTopic, SensorField::BatteryPercent, "battery"},
+    {AppConfig::EspHomeOutsideTemperatureTopic, SensorField::OutsideTemperatureC, "outside_temperature"},
+    {AppConfig::EspHomeSolarPanelVoltageTopic, SensorField::SolarPanelVoltageV, "solar_voltage"},
+    {AppConfig::EspHomeSolarPanelCurrentTopic, SensorField::SolarPanelCurrentmA, "solar_current"},
+    {AppConfig::EspHomeOutsideHumidityTopic, SensorField::OutsideHumidityPercent, "outside_humidity"},
+    {AppConfig::EspHomeAbsolutePressureTopic, SensorField::AbsolutePressurehPa, "absolute_pressure"},
+};
+
+const EspHomeSensorTopic* findEspHomeSensorTopic(const char* topic) {
+  for (const EspHomeSensorTopic& sensorTopic : EspHomeSensorTopics) {
+    if (strcmp(topic, sensorTopic.topic) == 0) {
+      return &sensorTopic;
+    }
+  }
+
+  return nullptr;
+}
+
+bool subscribeEspHomeTopics() {
+  bool allSubscribed = true;
+
+  for (const EspHomeSensorTopic& sensorTopic : EspHomeSensorTopics) {
+    if (s_mqttClient.subscribe(sensorTopic.topic)) {
+      LOG_TASK("subscribed ESPHome topic='%s'", sensorTopic.topic);
+    } else {
+      LOG_TASK("failed to subscribe ESPHome topic='%s'", sensorTopic.topic);
+      allSubscribed = false;
+    }
+  }
+
+  return allSubscribed;
+}
+
 void maintainMqtt(uint32_t nowMs) {
   if (WiFi.status() != WL_CONNECTED) {
     return;
@@ -362,10 +393,9 @@ void maintainMqtt(uint32_t nowMs) {
 
   s_lastMqttAttemptMs = nowMs;
   configureMqttClientServer();
-  LOG_TASK("connecting MQTT broker=%s:%u topic='%s'",
+  LOG_TASK("connecting MQTT broker=%s:%u for hardcoded ESPHome topics",
            s_mqttSettings.host,
-           s_mqttSettings.port,
-           s_mqttSettings.telemetryTopic);
+           s_mqttSettings.port);
 
   if (!mqttConnectWithWill()) {
     const int state = s_mqttClient.state();
@@ -383,81 +413,44 @@ void maintainMqtt(uint32_t nowMs) {
            s_mqttSettings.port,
            mqttStateReason(s_mqttClient.state()));
 
-  if (s_mqttClient.subscribe(s_mqttSettings.telemetryTopic)) {
-    LOG_TASK("subscribed telemetry topic='%s'", s_mqttSettings.telemetryTopic);
-  } else {
-    LOG_TASK("failed to subscribe telemetry topic='%s'", s_mqttSettings.telemetryTopic);
-  }
-}
-
-bool readFloat(JsonObjectConst root, const char* key, float& target) {
-  JsonVariantConst value = root[key];
-  if (value.isNull() || !value.is<float>()) {
-    return false;
-  }
-
-  target = value.as<float>();
-  return true;
-}
-
-bool readInt(JsonObjectConst root, const char* key, int& target) {
-  JsonVariantConst value = root[key];
-  if (value.isNull() || !value.is<int>()) {
-    return false;
-  }
-
-  target = value.as<int>();
-  return true;
+  subscribeEspHomeTopics();
 }
 
 void parseTelemetryMessage(const MqttInboundMessage& message) {
+  const EspHomeSensorTopic* sensorTopic = findEspHomeSensorTopic(message.topic);
+  if (sensorTopic == nullptr) {
+    LOG_TASK("ignored unknown MQTT topic='%s'", message.topic);
+    return;
+  }
+
   AppStateStore::recordMqttReceive(message.receivedAtMs, 0);
 
-  JsonDocument document;
-  const DeserializationError error =
-      deserializeJson(document, message.payload, message.payloadLength);
+  errno = 0;
+  char* end = nullptr;
+  const float value = strtof(message.payload, &end);
 
-  if (error) {
-    LOG_TASK("invalid MQTT JSON topic='%s' error=%s", message.topic, error.c_str());
+  if (end == message.payload || errno == ERANGE) {
+    LOG_TASK("invalid numeric payload topic='%s' payload='%s'", message.topic, message.payload);
     return;
   }
 
-  JsonObjectConst root = document.as<JsonObjectConst>();
-  if (root.isNull()) {
-    LOG_TASK("MQTT payload is not a JSON object topic='%s'", message.topic);
-    return;
+  while (*end != '\0') {
+    if (!isspace(static_cast<unsigned char>(*end))) {
+      LOG_TASK("invalid numeric payload topic='%s' payload='%s'", message.topic, message.payload);
+      return;
+    }
+    ++end;
   }
 
-  SensorTelemetry telemetry;
-  telemetry.valid = true;
-  telemetry.stale = false;
-  copyString(telemetry.source, sizeof(telemetry.source), message.topic);
-
-  JsonVariantConst source = root["source"];
-  if (!source.isNull() && source.is<const char*>()) {
-    copyString(telemetry.source, sizeof(telemetry.source), source.as<const char*>());
-  }
-
-  readFloat(root, "temperature", telemetry.temperatureC);
-  readFloat(root, "temperatureC", telemetry.temperatureC);
-  readFloat(root, "temp", telemetry.temperatureC);
-  readFloat(root, "humidity", telemetry.humidityPct);
-  readFloat(root, "humidityPct", telemetry.humidityPct);
-  readFloat(root, "pressure", telemetry.pressureHpa);
-  readFloat(root, "pressureHpa", telemetry.pressureHpa);
-  readFloat(root, "battery", telemetry.batteryPct);
-  readFloat(root, "batteryPct", telemetry.batteryPct);
-  readInt(root, "rssi", telemetry.rssiDbm);
-  readInt(root, "rssiDbm", telemetry.rssiDbm);
-
-  AppStateStore::updateTelemetry(telemetry, message.receivedAtMs, 0);
+  AppStateStore::updateSensorValue(sensorTopic->field, value, message.receivedAtMs, 0);
 
   if (s_systemEvents != nullptr) {
     xEventGroupSetBits(s_systemEvents, AppEvents::AppStateUpdated);
   }
 
-  LOG_TASK("telemetry updated source='%s' received_at_ms=%lu valid=1 stale=0",
-           telemetry.source,
+  LOG_TASK("ESPHome sensor updated label='%s' value=%.3f received_at_ms=%lu",
+           sensorTopic->label,
+           value,
            static_cast<unsigned long>(message.receivedAtMs));
 }
 
@@ -481,7 +474,7 @@ void updateTelemetryStaleState(uint32_t nowMs) {
     return;
   }
 
-  if (nowMs - snapshot.lastTelemetryUpdateMs >= AppConfig::TelemetryStaleAfterMs) {
+  if (nowMs - snapshot.lastMqttReceiveMs >= AppConfig::TelemetryStaleAfterMs) {
     AppStateStore::setTelemetryStale(true, 0);
     LOG_TASK("telemetry marked stale after %lu ms last_receive_ms=%lu valid=%d stale=1",
              static_cast<unsigned long>(AppConfig::TelemetryStaleAfterMs),

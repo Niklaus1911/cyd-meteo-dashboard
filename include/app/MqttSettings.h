@@ -9,7 +9,6 @@ struct MqttSettings {
   uint16_t port = AppConfig::DefaultMqttPort;
   char username[AppConfig::MqttUserMaxLength] = {};
   char password[AppConfig::MqttPasswordMaxLength] = {};
-  char telemetryTopic[AppConfig::MqttTopicMaxLength] = {};
 
   bool isComplete() const;
   bool hasCredentials() const;

@@ -2,15 +2,36 @@
 
 #include <Arduino.h>
 
+enum class SensorField : uint8_t {
+  BatteryPercent,
+  OutsideTemperatureC,
+  SolarPanelVoltageV,
+  SolarPanelCurrentmA,
+  OutsideHumidityPercent,
+  AbsolutePressurehPa,
+};
+
 struct SensorTelemetry {
   bool valid = false;
   bool stale = true;
-  char source[32] = {};
-  float temperatureC = NAN;
-  float humidityPct = NAN;
-  float pressureHpa = NAN;
-  float batteryPct = NAN;
-  int rssiDbm = 0;
+
+  float batteryPercent = NAN;
+  bool batteryPercentValid = false;
+
+  float outsideTemperatureC = NAN;
+  bool outsideTemperatureValid = false;
+
+  float solarPanelVoltageV = NAN;
+  bool solarPanelVoltageValid = false;
+
+  float solarPanelCurrentmA = NAN;
+  bool solarPanelCurrentValid = false;
+
+  float outsideHumidityPercent = NAN;
+  bool outsideHumidityValid = false;
+
+  float absolutePressurehPa = NAN;
+  bool absolutePressureValid = false;
 };
 
 struct AppState {

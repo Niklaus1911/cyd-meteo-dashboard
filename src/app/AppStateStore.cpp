@@ -100,6 +100,54 @@ bool updateTelemetry(const SensorTelemetry& telemetry,
   return true;
 }
 
+bool updateSensorValue(SensorField field,
+                       float value,
+                       uint32_t updateMs,
+                       TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  switch (field) {
+    case SensorField::BatteryPercent:
+      s_state.latestSensor.batteryPercent = value;
+      s_state.latestSensor.batteryPercentValid = true;
+      break;
+    case SensorField::OutsideTemperatureC:
+      s_state.latestSensor.outsideTemperatureC = value;
+      s_state.latestSensor.outsideTemperatureValid = true;
+      break;
+    case SensorField::SolarPanelVoltageV:
+      s_state.latestSensor.solarPanelVoltageV = value;
+      s_state.latestSensor.solarPanelVoltageValid = true;
+      break;
+    case SensorField::SolarPanelCurrentmA:
+      s_state.latestSensor.solarPanelCurrentmA = value;
+      s_state.latestSensor.solarPanelCurrentValid = true;
+      break;
+    case SensorField::OutsideHumidityPercent:
+      s_state.latestSensor.outsideHumidityPercent = value;
+      s_state.latestSensor.outsideHumidityValid = true;
+      break;
+    case SensorField::AbsolutePressurehPa:
+      s_state.latestSensor.absolutePressurehPa = value;
+      s_state.latestSensor.absolutePressureValid = true;
+      break;
+  }
+
+  s_state.latestSensor.valid = true;
+  s_state.latestSensor.stale = false;
+  s_state.lastTelemetryUpdateMs = updateMs;
+  s_state.lastMqttReceiveMs = updateMs;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
 bool setTelemetryStale(bool stale, TickType_t timeoutTicks) {
   if (s_mutex == nullptr) {
     return false;
@@ -125,6 +173,9 @@ bool recordMqttReceive(uint32_t receiveMs, TickType_t timeoutTicks) {
   }
 
   s_state.lastMqttReceiveMs = receiveMs;
+  if (s_state.latestSensor.valid) {
+    s_state.latestSensor.stale = false;
+  }
 
   xSemaphoreGive(s_mutex);
   return true;

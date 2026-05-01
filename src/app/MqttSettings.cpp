@@ -11,7 +11,6 @@ constexpr const char* HostKey = "host";
 constexpr const char* PortKey = "port";
 constexpr const char* UserKey = "user";
 constexpr const char* PassKey = "pass";
-constexpr const char* TopicKey = "topic";
 
 void copyString(char* destination, size_t destinationSize, const String& source) {
   if (destinationSize == 0) {
@@ -29,7 +28,7 @@ bool isNoneValue(const char* value) {
 }  // namespace
 
 bool MqttSettings::isComplete() const {
-  return host[0] != '\0' && telemetryTopic[0] != '\0' && port > 0;
+  return host[0] != '\0' && port > 0;
 }
 
 bool MqttSettings::hasCredentials() const {
@@ -48,7 +47,6 @@ bool load(MqttSettings& settings) {
   settings.port = preferences.getUShort(PortKey, AppConfig::DefaultMqttPort);
   copyString(settings.username, sizeof(settings.username), preferences.getString(UserKey, ""));
   copyString(settings.password, sizeof(settings.password), preferences.getString(PassKey, ""));
-  copyString(settings.telemetryTopic, sizeof(settings.telemetryTopic), preferences.getString(TopicKey, ""));
 
   preferences.end();
   return true;
@@ -64,7 +62,7 @@ bool save(const MqttSettings& settings) {
   preferences.putUShort(PortKey, settings.port);
   preferences.putString(UserKey, settings.username);
   preferences.putString(PassKey, settings.password);
-  preferences.putString(TopicKey, settings.telemetryTopic);
+  preferences.remove("topic");
 
   preferences.end();
   return true;

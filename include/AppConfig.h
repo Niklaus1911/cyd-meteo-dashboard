@@ -32,6 +32,13 @@ constexpr const char* MqttClientId = "cyd-dashboard";
 constexpr const char* MqttAvailabilityTopic = "home/cyd/status";
 constexpr const char* WifiManagerPortalSsid = "CYD-Dashboard-Setup";
 
+constexpr const char* EspHomeBatteryTopic = "esp-c3-meteo-v2/sensor/18650_battery_level/state";
+constexpr const char* EspHomeOutsideTemperatureTopic = "esp-c3-meteo-v2/sensor/outside_temperature/state";
+constexpr const char* EspHomeSolarPanelVoltageTopic = "esp-c3-meteo-v2/sensor/solar_panel_voltage/state";
+constexpr const char* EspHomeSolarPanelCurrentTopic = "esp-c3-meteo-v2/sensor/solar_panel_current/state";
+constexpr const char* EspHomeOutsideHumidityTopic = "esp-c3-meteo-v2/sensor/outside_humidity/state";
+constexpr const char* EspHomeAbsolutePressureTopic = "esp-c3-meteo-v2/sensor/absolute_pressure/state";
+
 constexpr uint32_t WifiReconnectIntervalMs = 10000;
 constexpr uint32_t MqttReconnectIntervalMs = 5000;
 constexpr uint32_t TelemetryStaleAfterMs = 60000;
