@@ -63,6 +63,9 @@ struct AppState {
   uint32_t uptimeMs = 0;
   uint32_t freeHeapBytes = 0;
 
+  bool displayFlipped180 = false;
+  uint8_t displayRotation = 1;
+
   bool forecastValid = false;
   char forecastRegion[AppConfig::ForecastRegionMaxLength] = {};
   char forecastAlert[AppConfig::ForecastAlertMaxLength] = {};

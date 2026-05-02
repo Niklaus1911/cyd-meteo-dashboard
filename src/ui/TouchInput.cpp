@@ -6,7 +6,7 @@
 #include <lvgl.h>
 
 #include "Log.h"
-#include "display/DisplayConfig.h"
+#include "display/TftDisplay.h"
 #include "display/TouchConfig.h"
 
 namespace {
@@ -73,6 +73,12 @@ lv_point_t mapTouchPoint(const TS_Point& rawPoint) {
                           TouchConfig::OffsetY,
                       0,
                       maxY);
+
+  if (TftDisplay::isFlipped180()) {
+    point.x = maxX - point.x;
+    point.y = maxY - point.y;
+  }
+
   return point;
 }
 
@@ -237,7 +243,7 @@ void begin(uint16_t screenWidth, uint16_t screenHeight) {
            TouchConfig::MosiPin,
            s_screenWidth,
            s_screenHeight,
-           DisplayConfig::Rotation);
+           TftDisplay::rotation());
 }
 
 }  // namespace TouchInput

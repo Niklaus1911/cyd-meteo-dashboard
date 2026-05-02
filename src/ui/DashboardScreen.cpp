@@ -6,6 +6,9 @@
 #include "AppConfig.h"
 #include "AppQueues.h"
 #include "Log.h"
+#include "app/AppStateStore.h"
+#include "app/UserSettings.h"
+#include "display/DisplayConfig.h"
 
 namespace {
 
@@ -65,6 +68,7 @@ lv_obj_t* s_settingsLast = nullptr;
 lv_obj_t* s_settingsExpected = nullptr;
 lv_obj_t* s_settingsStale = nullptr;
 lv_obj_t* s_settingsHeap = nullptr;
+lv_obj_t* s_settingsOrientation = nullptr;
 lv_obj_t* s_eraseButton = nullptr;
 lv_obj_t* s_resettingTitle = nullptr;
 lv_obj_t* s_resettingDetail = nullptr;
@@ -75,6 +79,8 @@ lv_obj_t* s_forecastAlert = nullptr;
 lv_obj_t* s_forecastUpdated = nullptr;
 lv_obj_t* s_forecastText = nullptr;
 lv_obj_t* s_forecastLowSummary = nullptr;
+bool s_orientationRestartPending = false;
+uint32_t s_orientationRestartAtMs = 0;
 
 MetricCard s_temperature;
 MetricCard s_humidity;
@@ -340,6 +346,33 @@ void onForecastBackButton(lv_event_t* event) {
   }
 }
 
+void onRotateDisplayButton(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code != LV_EVENT_RELEASED || s_orientationRestartPending) {
+    return;
+  }
+
+  AppState snapshot;
+  const bool hasSnapshot = AppStateStore::copy(snapshot, 0);
+  const bool nextFlipped = hasSnapshot ? !snapshot.displayFlipped180
+                                       : !UserSettingsStore::isDisplayFlipped180();
+
+  if (!UserSettingsStore::saveDisplayFlipped180(nextFlipped)) {
+    LOG_TASK("failed to save display orientation flipped180=%d", nextFlipped);
+    return;
+  }
+
+  const uint8_t nextRotation = nextFlipped ? DisplayConfig::FlippedDisplayRotation
+                                           : DisplayConfig::NormalDisplayRotation;
+  AppStateStore::setDisplayOrientation(nextFlipped, nextRotation, 0);
+
+  setLabel(s_resettingTitle, "Saving orientation...");
+  setLabel(s_resettingDetail, "Rebooting...");
+  showPage(Page::Resetting);
+  s_orientationRestartPending = true;
+  s_orientationRestartAtMs = millis() + 800UL;
+}
+
 void onBackButton(lv_event_t* event) {
   const lv_event_code_t code = lv_event_get_code(event);
   if (code == LV_EVENT_PRESSED) {
@@ -603,9 +636,17 @@ void create(QueueHandle_t commandQueue) {
   s_settingsHeap = createLabel(s_settingsPage, "Heap: --", &lv_font_montserrat_12, ColorMuted, 166, 120, 140);
   s_settingsLast = createLabel(s_settingsPage, "Last: --", &lv_font_montserrat_12, ColorMuted, 14, 142, 136);
   s_settingsExpected = createLabel(s_settingsPage, "Expect: 10m", &lv_font_montserrat_12, ColorMuted, 166, 142, 140);
-  s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 164, 292);
-  createButton(s_settingsPage, "Forecast", 32, 178, 120, 48, onForecastButton, ColorPanelAlt);
-  createButton(s_settingsPage, "Reset WiFi/MQTT", 164, 178, 124, 48, onResetButton, ColorDestructive);
+  s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 160, 136);
+  s_settingsOrientation = createLabel(s_settingsPage,
+                                      "Orientation: Normal",
+                                      &lv_font_montserrat_12,
+                                      ColorMuted,
+                                      166,
+                                      160,
+                                      140);
+  createButton(s_settingsPage, "Forecast", 14, 184, 80, 42, onForecastButton, ColorPanelAlt);
+  createButton(s_settingsPage, "Flip 180", 102, 184, 80, 42, onRotateDisplayButton, ColorPanelAlt);
+  createButton(s_settingsPage, "Reset WiFi/MQTT", 190, 184, 116, 42, onResetButton, ColorDestructive);
 
   createLabel(s_confirmPage,
               "Erase saved WiFi and MQTT settings?",
@@ -766,6 +807,12 @@ void update(const AppState& state) {
                         AppConfig::TelemetryStaleAfterMs);
   setLabel(s_settingsStale, buffer);
 
+  snprintf(buffer,
+           sizeof(buffer),
+           "Orientation: %s",
+           state.displayFlipped180 ? "Flipped" : "Normal");
+  setLabel(s_settingsOrientation, buffer);
+
   if (!state.forecastValid) {
     setHidden(s_forecastNoData, false);
     setForecastDetailsVisible(false);
@@ -787,6 +834,10 @@ void update(const AppState& state) {
     setLabel(s_resettingDetail,
              state.credentialRebooting ? "Rebooting to setup mode" : "Preparing reboot...");
     showPage(Page::Resetting);
+  }
+
+  if (s_orientationRestartPending && millis() >= s_orientationRestartAtMs) {
+    ESP.restart();
   }
 
   const bool hasData = state.latestSensor.valid;

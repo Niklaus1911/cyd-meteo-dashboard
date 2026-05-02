@@ -298,6 +298,22 @@ bool updateFreeHeap(uint32_t freeHeapBytes, TickType_t timeoutTicks) {
   return true;
 }
 
+bool setDisplayOrientation(bool flipped180, uint8_t rotation, TickType_t timeoutTicks) {
+  if (s_mutex == nullptr) {
+    return false;
+  }
+
+  if (xSemaphoreTake(s_mutex, timeoutTicks) != pdTRUE) {
+    return false;
+  }
+
+  s_state.displayFlipped180 = flipped180;
+  s_state.displayRotation = rotation;
+
+  xSemaphoreGive(s_mutex);
+  return true;
+}
+
 SemaphoreHandle_t mutexHandle() {
   return s_mutex;
 }
