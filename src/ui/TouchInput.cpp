@@ -284,6 +284,17 @@ void begin(uint16_t screenWidth, uint16_t screenHeight) {
   }
 
   s_initialized = s_inputDevice != nullptr;
+  LOG_TASK("saved touch calibration valid=%d RawMinX=%ld RawMaxX=%ld RawMinY=%ld RawMaxY=%ld OffsetX=%d OffsetY=%d SwapXY=%d InvertX=%d InvertY=%d",
+           s_calibrationSaved,
+           static_cast<long>(s_calibration.rawMinX),
+           static_cast<long>(s_calibration.rawMaxX),
+           static_cast<long>(s_calibration.rawMinY),
+           static_cast<long>(s_calibration.rawMaxY),
+           s_calibration.offsetX,
+           s_calibration.offsetY,
+           s_calibration.swapXY,
+           s_calibration.invertX,
+           s_calibration.invertY);
   LOG_TASK("touch initialized cs=%d irq=%d spi=%u pins sclk=%d miso=%d mosi=%d screen=%ux%u rotation=%u calibration=%s raw=(%ld,%ld)-(%ld,%ld) offset=(%d,%d)",
            TouchConfig::CsPin,
            TouchConfig::UseIrqPin ? TouchConfig::IrqPin : -1,
