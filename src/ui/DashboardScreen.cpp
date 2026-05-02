@@ -104,7 +104,6 @@ Page s_pendingPage = Page::Dashboard;
 bool s_pendingPageValid = false;
 const char* s_pendingReason = nullptr;
 uint32_t s_pendingInputIgnoreMs = 0;
-uint32_t s_ignoreInputUntilMs = 0;
 lv_timer_t* s_calibrationTimer = nullptr;
 TouchCalibrationSample s_calibrationSamples[5];
 uint8_t s_calibrationPointIndex = 0;
@@ -328,12 +327,11 @@ const char* pageName(Page page) {
 }
 
 bool inputIgnored() {
-  return s_ignoreInputUntilMs != 0 &&
-         static_cast<int32_t>(s_ignoreInputUntilMs - millis()) > 0;
+  return TouchInput::isInputIgnored();
 }
 
 void ignoreInputFor(uint32_t durationMs) {
-  s_ignoreInputUntilMs = millis() + durationMs;
+  TouchInput::ignoreInputFor(durationMs);
 }
 
 void applyPage(Page page, const char* reason) {
@@ -383,7 +381,11 @@ void applyPage(Page page, const char* reason) {
     lv_obj_clear_flag(visiblePage, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(visiblePage);
     s_currentPage = page;
-    ignoreInputFor(s_pendingInputIgnoreMs);
+    if (s_pendingInputIgnoreMs > 0) {
+      ignoreInputFor(s_pendingInputIgnoreMs);
+    } else {
+      TouchInput::resetState();
+    }
     LOG_TASK("page transition %s -> %s reason=%s",
              pageName(previousPage),
              pageName(page),
@@ -412,6 +414,10 @@ void requestPage(Page page, const char* reason, uint32_t inputIgnoreMs = Navigat
     return;
   }
 
+  LOG_TASK("page transition requested %s -> %s reason=%s",
+           pageName(s_currentPage),
+           pageName(page),
+           reason != nullptr ? reason : "navigation");
   s_pendingPage = page;
   s_pendingPageValid = true;
   s_pendingReason = reason;
@@ -478,6 +484,7 @@ void onForecastButton(lv_event_t* event) {
 
 void onForecastBackButton(lv_event_t* event) {
   if (shouldHandleRelease(event)) {
+    LOG_TASK("forecast back released");
     requestPage(Page::Settings, "Forecast -> Settings");
   }
 }
@@ -516,6 +523,7 @@ void onCalibrateTouchButton(lv_event_t* event) {
 
 void onBackButton(lv_event_t* event) {
   if (shouldHandleRelease(event)) {
+    LOG_TASK("settings back released");
     requestPage(Page::Dashboard, "Settings -> Dashboard");
   }
 }
@@ -528,6 +536,7 @@ void onResetButton(lv_event_t* event) {
 
 void onCancelButton(lv_event_t* event) {
   if (shouldHandleRelease(event)) {
+    LOG_TASK("cancel released");
     requestPage(Page::Settings, "ResetConfirm -> Settings");
   }
 }
