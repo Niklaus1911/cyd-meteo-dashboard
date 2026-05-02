@@ -8,6 +8,7 @@
 namespace DashboardScreen {
 
 void create(QueueHandle_t commandQueue);
+void tick();
 void update(const AppState& state);
 
 }  // namespace DashboardScreen

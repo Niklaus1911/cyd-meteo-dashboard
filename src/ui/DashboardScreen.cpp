@@ -100,6 +100,11 @@ lv_obj_t* s_calibrationVertical = nullptr;
 bool s_orientationRestartPending = false;
 uint32_t s_orientationRestartAtMs = 0;
 Page s_currentPage = Page::Dashboard;
+Page s_pendingPage = Page::Dashboard;
+bool s_pendingPageValid = false;
+const char* s_pendingReason = nullptr;
+uint32_t s_pendingInputIgnoreMs = 0;
+uint32_t s_ignoreInputUntilMs = 0;
 lv_timer_t* s_calibrationTimer = nullptr;
 TouchCalibrationSample s_calibrationSamples[5];
 uint8_t s_calibrationPointIndex = 0;
@@ -112,6 +117,8 @@ int32_t s_calibrationRawZTotal = 0;
 
 constexpr uint8_t CalibrationPointCount = 5;
 constexpr uint8_t CalibrationSamplesPerPoint = 8;
+constexpr uint32_t NavigationInputIgnoreMs = 300;
+constexpr uint32_t CalibrationReturnInputIgnoreMs = 500;
 constexpr lv_coord_t CalibrationTargetX[CalibrationPointCount] = {20, 299, 299, 20, 160};
 constexpr lv_coord_t CalibrationTargetY[CalibrationPointCount] = {20, 20, 219, 219, 120};
 
@@ -225,7 +232,7 @@ lv_obj_t* createButton(lv_obj_t* parent,
   lv_obj_set_size(button, width, height);
   styleButton(button, color);
   if (callback != nullptr) {
-    lv_obj_add_event_cb(button, callback, LV_EVENT_ALL, nullptr);
+    lv_obj_add_event_cb(button, callback, LV_EVENT_RELEASED, nullptr);
   }
 
   lv_obj_t* label = lv_label_create(button);
@@ -301,7 +308,35 @@ void setBadge(lv_obj_t* badge, const char* text, uint32_t bgColor, uint32_t text
   lv_obj_set_style_text_color(badge, lv_color_hex(textColor), 0);
 }
 
-void showPage(Page page) {
+const char* pageName(Page page) {
+  switch (page) {
+    case Page::Dashboard:
+      return "Dashboard";
+    case Page::Settings:
+      return "Settings";
+    case Page::ResetConfirm:
+      return "ResetConfirm";
+    case Page::Resetting:
+      return "Resetting";
+    case Page::Forecast:
+      return "Forecast";
+    case Page::TouchCalibration:
+      return "TouchCalibration";
+  }
+
+  return "?";
+}
+
+bool inputIgnored() {
+  return s_ignoreInputUntilMs != 0 &&
+         static_cast<int32_t>(s_ignoreInputUntilMs - millis()) > 0;
+}
+
+void ignoreInputFor(uint32_t durationMs) {
+  s_ignoreInputUntilMs = millis() + durationMs;
+}
+
+void applyPage(Page page, const char* reason) {
   if (s_dashboardPage != nullptr) {
     lv_obj_add_flag(s_dashboardPage, LV_OBJ_FLAG_HIDDEN);
   }
@@ -344,10 +379,75 @@ void showPage(Page page) {
   }
 
   if (visiblePage != nullptr) {
+    const Page previousPage = s_currentPage;
     lv_obj_clear_flag(visiblePage, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(visiblePage);
     s_currentPage = page;
+    ignoreInputFor(s_pendingInputIgnoreMs);
+    LOG_TASK("page transition %s -> %s reason=%s",
+             pageName(previousPage),
+             pageName(page),
+             reason != nullptr ? reason : "navigation");
   }
+}
+
+void requestPage(Page page, const char* reason, uint32_t inputIgnoreMs = NavigationInputIgnoreMs) {
+  if (inputIgnored()) {
+    LOG_TASK("page transition ignored target=%s reason=%s input_settling=1",
+             pageName(page),
+             reason != nullptr ? reason : "navigation");
+    return;
+  }
+
+  if (s_pendingPageValid) {
+    LOG_TASK("page transition ignored target=%s reason=%s pending=%s",
+             pageName(page),
+             reason != nullptr ? reason : "navigation",
+             pageName(s_pendingPage));
+    return;
+  }
+
+  if (s_currentPage == page) {
+    ignoreInputFor(inputIgnoreMs);
+    return;
+  }
+
+  s_pendingPage = page;
+  s_pendingPageValid = true;
+  s_pendingReason = reason;
+  s_pendingInputIgnoreMs = inputIgnoreMs;
+}
+
+void processPendingNavigation() {
+  if (!s_pendingPageValid) {
+    return;
+  }
+
+  const Page page = s_pendingPage;
+  const char* reason = s_pendingReason;
+  s_pendingPageValid = false;
+  s_pendingReason = nullptr;
+  applyPage(page, reason);
+}
+
+bool shouldHandleRelease(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_RELEASED) {
+    return false;
+  }
+
+  if (inputIgnored()) {
+    LOG_TASK("button release ignored while input settles page=%s", pageName(s_currentPage));
+    return false;
+  }
+
+  if (s_pendingPageValid) {
+    LOG_TASK("button release ignored while navigation pending page=%s target=%s",
+             pageName(s_currentPage),
+             pageName(s_pendingPage));
+    return false;
+  }
+
+  return true;
 }
 
 void sendResetCredentialsCommand() {
@@ -362,35 +462,28 @@ void sendResetCredentialsCommand() {
 }
 
 void onGearButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_PRESSED) {
-    LOG_TASK("gear button pressed");
-  } else if (code == LV_EVENT_RELEASED) {
-    LOG_TASK("opening settings screen");
-    showPage(Page::Settings);
+  if (shouldHandleRelease(event)) {
+    requestPage(Page::Settings, "Dashboard -> Settings");
   }
 }
 
 void onForecastButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_RELEASED) {
+  if (shouldHandleRelease(event)) {
     if (s_forecastContent != nullptr) {
       lv_obj_scroll_to_y(s_forecastContent, 0, LV_ANIM_OFF);
     }
-    showPage(Page::Forecast);
+    requestPage(Page::Forecast, "Settings -> Forecast");
   }
 }
 
 void onForecastBackButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_RELEASED) {
-    showPage(Page::Settings);
+  if (shouldHandleRelease(event)) {
+    requestPage(Page::Settings, "Forecast -> Settings");
   }
 }
 
 void onRotateDisplayButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code != LV_EVENT_RELEASED || s_orientationRestartPending) {
+  if (!shouldHandleRelease(event) || s_orientationRestartPending) {
     return;
   }
 
@@ -410,66 +503,47 @@ void onRotateDisplayButton(lv_event_t* event) {
 
   setLabel(s_resettingTitle, "Saving orientation...");
   setLabel(s_resettingDetail, "Rebooting...");
-  showPage(Page::Resetting);
+  requestPage(Page::Resetting, "Settings -> Resetting orientation");
   s_orientationRestartPending = true;
   s_orientationRestartAtMs = millis() + 800UL;
 }
 
 void onCalibrateTouchButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_RELEASED) {
+  if (shouldHandleRelease(event)) {
     startTouchCalibration();
   }
 }
 
 void onBackButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_PRESSED) {
-    LOG_TASK("settings back pressed");
-  } else if (code == LV_EVENT_RELEASED) {
-    LOG_TASK("settings back released");
-    showPage(Page::Dashboard);
+  if (shouldHandleRelease(event)) {
+    requestPage(Page::Dashboard, "Settings -> Dashboard");
   }
 }
 
 void onResetButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_PRESSED) {
-    LOG_TASK("reset pressed");
-  } else if (code == LV_EVENT_RELEASED) {
-    LOG_TASK("reset released");
-    showPage(Page::ResetConfirm);
+  if (shouldHandleRelease(event)) {
+    requestPage(Page::ResetConfirm, "Settings -> ResetConfirm");
   }
 }
 
 void onCancelButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_PRESSED) {
-    LOG_TASK("cancel pressed");
-  } else if (code == LV_EVENT_RELEASED) {
-    LOG_TASK("cancel released");
-    showPage(Page::Settings);
+  if (shouldHandleRelease(event)) {
+    requestPage(Page::Settings, "ResetConfirm -> Settings");
   }
 }
 
 void onEraseButton(lv_event_t* event) {
-  const lv_event_code_t code = lv_event_get_code(event);
-  if (code == LV_EVENT_PRESSED) {
-    LOG_TASK("erase pressed");
-    return;
-  }
-  if (code != LV_EVENT_RELEASED) {
+  if (!shouldHandleRelease(event)) {
     return;
   }
 
-  LOG_TASK("erase released");
   if (s_eraseButton != nullptr) {
     lv_obj_add_state(s_eraseButton, LV_STATE_DISABLED);
   }
 
   setLabel(s_resettingTitle, "Resetting...");
   setLabel(s_resettingDetail, "Rebooting to setup mode");
-  showPage(Page::Resetting);
+  requestPage(Page::Resetting, "ResetConfirm -> Resetting");
   sendResetCredentialsCommand();
 }
 
@@ -793,7 +867,7 @@ void startTouchCalibration() {
     lv_timer_resume(s_calibrationTimer);
   }
 
-  showPage(Page::TouchCalibration);
+  requestPage(Page::TouchCalibration, "Settings -> TouchCalibration");
 }
 
 }  // namespace
@@ -832,7 +906,7 @@ void create(QueueHandle_t commandQueue) {
                               nullptr,
                               ColorPanel);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
-  lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_ALL, nullptr);
+  lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_RELEASED, nullptr);
 
   s_statusBadge = createBadge(s_dashboardPage, 8, 29, 76);
 
@@ -1070,7 +1144,11 @@ void create(QueueHandle_t commandQueue) {
   setHidden(s_calibrationHorizontal, true);
   setHidden(s_calibrationVertical, true);
 
-  showPage(Page::Dashboard);
+  applyPage(Page::Dashboard, "initial");
+}
+
+void tick() {
+  processPendingNavigation();
 }
 
 void update(const AppState& state) {
@@ -1172,7 +1250,10 @@ void update(const AppState& state) {
     setLabel(s_resettingTitle, state.credentialResetting ? "Resetting..." : "Reset requested");
     setLabel(s_resettingDetail,
              state.credentialRebooting ? "Rebooting to setup mode" : "Preparing reboot...");
-    showPage(Page::Resetting);
+    if (s_currentPage != Page::Resetting &&
+        !(s_pendingPageValid && s_pendingPage == Page::Resetting)) {
+      requestPage(Page::Resetting, "Reset state -> Resetting");
+    }
   }
 
   if (s_orientationRestartPending && millis() >= s_orientationRestartAtMs) {
@@ -1180,8 +1261,15 @@ void update(const AppState& state) {
   }
 
   if (s_calibrationFinishAtMs > 0 && millis() >= s_calibrationFinishAtMs) {
+    TouchInput::RawPoint rawPoint;
+    if (TouchInput::readRawPoint(rawPoint)) {
+      return;
+    }
+
     s_calibrationFinishAtMs = 0;
-    showPage(Page::Settings);
+    requestPage(Page::Settings,
+                "TouchCalibration -> Settings",
+                CalibrationReturnInputIgnoreMs);
   }
 
   const bool hasData = state.latestSensor.valid;

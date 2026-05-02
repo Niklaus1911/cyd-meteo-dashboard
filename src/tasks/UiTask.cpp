@@ -46,6 +46,7 @@ void uiTaskMain(void*) {
       DashboardScreen::update(snapshot);
     }
 
+    DashboardScreen::tick();
     LvglPort::tick();
     LvglPort::handleTimers();
 
