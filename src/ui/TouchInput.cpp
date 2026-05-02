@@ -6,6 +6,7 @@
 #include <lvgl.h>
 
 #include "Log.h"
+#include "app/TouchCalibration.h"
 #include "display/TftDisplay.h"
 #include "display/TouchConfig.h"
 
@@ -27,6 +28,22 @@ uint16_t s_screenHeight = 240;
 lv_point_t s_lastPoint = {0, 0};
 uint32_t s_lastDebugLogMs = 0;
 bool s_initialized = false;
+bool s_calibrationSaved = false;
+TouchCalibrationData s_calibration;
+
+TouchCalibrationData defaultCalibration() {
+  TouchCalibrationData calibration;
+  calibration.rawMinX = TouchConfig::RawMinX;
+  calibration.rawMaxX = TouchConfig::RawMaxX;
+  calibration.rawMinY = TouchConfig::RawMinY;
+  calibration.rawMaxY = TouchConfig::RawMaxY;
+  calibration.offsetX = TouchConfig::OffsetX;
+  calibration.offsetY = TouchConfig::OffsetY;
+  calibration.swapXY = TouchConfig::SwapXY;
+  calibration.invertX = TouchConfig::InvertX;
+  calibration.invertY = TouchConfig::InvertY;
+  return calibration;
+}
 
 int16_t mapAxis(int32_t raw, int32_t rawMin, int32_t rawMax, uint16_t outputSize, bool invert) {
   if (outputSize == 0 || rawMin == rawMax) {
@@ -48,7 +65,7 @@ lv_point_t mapTouchPoint(const TS_Point& rawPoint) {
   int32_t rawX = rawPoint.x;
   int32_t rawY = rawPoint.y;
 
-  if (TouchConfig::SwapXY) {
+  if (s_calibration.swapXY) {
     const int32_t swapped = rawX;
     rawX = rawY;
     rawY = swapped;
@@ -58,19 +75,19 @@ lv_point_t mapTouchPoint(const TS_Point& rawPoint) {
   const int32_t maxX = static_cast<int32_t>(s_screenWidth) - 1;
   const int32_t maxY = static_cast<int32_t>(s_screenHeight) - 1;
   point.x = constrain(mapAxis(rawX,
-                              TouchConfig::RawMinX,
-                              TouchConfig::RawMaxX,
+                              s_calibration.rawMinX,
+                              s_calibration.rawMaxX,
                               s_screenWidth,
-                              TouchConfig::InvertX) +
-                          TouchConfig::OffsetX,
+                              s_calibration.invertX) +
+                          s_calibration.offsetX,
                       0,
                       maxX);
   point.y = constrain(mapAxis(rawY,
-                              TouchConfig::RawMinY,
-                              TouchConfig::RawMaxY,
+                              s_calibration.rawMinY,
+                              s_calibration.rawMaxY,
                               s_screenHeight,
-                              TouchConfig::InvertY) +
-                          TouchConfig::OffsetY,
+                              s_calibration.invertY) +
+                          s_calibration.offsetY,
                       0,
                       maxY);
 
@@ -191,6 +208,8 @@ void begin(uint16_t screenWidth, uint16_t screenHeight) {
 
   s_screenWidth = screenWidth;
   s_screenHeight = screenHeight;
+  s_calibration = defaultCalibration();
+  s_calibrationSaved = TouchCalibrationStore::load(s_calibration);
 
   if (TouchConfig::UseIrqPin) {
     pinMode(TouchConfig::IrqPin, INPUT);
@@ -234,7 +253,7 @@ void begin(uint16_t screenWidth, uint16_t screenHeight) {
   }
 
   s_initialized = s_inputDevice != nullptr;
-  LOG_TASK("touch initialized cs=%d irq=%d spi=%u pins sclk=%d miso=%d mosi=%d screen=%ux%u rotation=%u",
+  LOG_TASK("touch initialized cs=%d irq=%d spi=%u pins sclk=%d miso=%d mosi=%d screen=%ux%u rotation=%u calibration=%s raw=(%ld,%ld)-(%ld,%ld) offset=(%d,%d)",
            TouchConfig::CsPin,
            TouchConfig::UseIrqPin ? TouchConfig::IrqPin : -1,
            TouchConfig::SpiBus,
@@ -243,7 +262,55 @@ void begin(uint16_t screenWidth, uint16_t screenHeight) {
            TouchConfig::MosiPin,
            s_screenWidth,
            s_screenHeight,
-           TftDisplay::rotation());
+           TftDisplay::rotation(),
+           s_calibrationSaved ? "saved" : "default",
+           static_cast<long>(s_calibration.rawMinX),
+           static_cast<long>(s_calibration.rawMinY),
+           static_cast<long>(s_calibration.rawMaxX),
+           static_cast<long>(s_calibration.rawMaxY),
+           s_calibration.offsetX,
+           s_calibration.offsetY);
+}
+
+bool readRawPoint(RawPoint& point) {
+  if (!s_initialized || !s_touch.touched()) {
+    return false;
+  }
+
+  TS_Point rawPoint;
+  if (!readAveragedRawPoint(rawPoint)) {
+    return false;
+  }
+
+  point.x = rawPoint.x;
+  point.y = rawPoint.y;
+  point.z = rawPoint.z;
+  return true;
+}
+
+bool saveCalibration(const TouchCalibrationData& calibration) {
+  if (!TouchCalibrationStore::save(calibration)) {
+    return false;
+  }
+
+  s_calibration = calibration;
+  s_calibrationSaved = true;
+  LOG_TASK("touch calibration saved raw=(%ld,%ld)-(%ld,%ld) offset=(%d,%d)",
+           static_cast<long>(s_calibration.rawMinX),
+           static_cast<long>(s_calibration.rawMinY),
+           static_cast<long>(s_calibration.rawMaxX),
+           static_cast<long>(s_calibration.rawMaxY),
+           s_calibration.offsetX,
+           s_calibration.offsetY);
+  return true;
+}
+
+bool isCalibrationSaved() {
+  return s_calibrationSaved;
+}
+
+const TouchCalibrationData& calibration() {
+  return s_calibration;
 }
 
 }  // namespace TouchInput
