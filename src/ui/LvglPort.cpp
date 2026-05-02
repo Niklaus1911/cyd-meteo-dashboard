@@ -112,6 +112,9 @@ void handleTimers() {
   const uint32_t startUs = micros();
   lv_timer_handler();
   const uint32_t durationUs = micros() - startUs;
+  if (durationUs > 500000UL) {
+    LOG_TASK("LVGL handler slow duration_us=%lu", static_cast<unsigned long>(durationUs));
+  }
 
   ++s_handlerCalls;
   s_handlerTotalUs += durationUs;

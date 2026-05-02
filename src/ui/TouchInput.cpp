@@ -30,8 +30,6 @@ uint32_t s_lastDebugLogMs = 0;
 uint32_t s_ignoreUntilMs = 0;
 bool s_initialized = false;
 bool s_waitForPhysicalRelease = false;
-bool s_ignoreActiveLogged = false;
-bool s_waitReleaseLogged = false;
 bool s_calibrationSaved = false;
 TouchCalibrationData s_calibration;
 
@@ -208,33 +206,11 @@ void readTouch(lv_indev_drv_t*, lv_indev_data_t* data) {
     data->state = LV_INDEV_STATE_REL;
     data->point = s_lastPoint;
 
-    if (ignored && !s_ignoreActiveLogged) {
-      LOG_TASK("touch input ignore active");
-      s_ignoreActiveLogged = true;
-    }
-
-    if (!ignored && s_ignoreActiveLogged) {
-      LOG_TASK("touch input ignore ended");
-      s_ignoreActiveLogged = false;
-    }
-
     if (!pressed) {
-      if (s_waitForPhysicalRelease) {
-        LOG_TASK("touch released after transition");
-      }
       s_waitForPhysicalRelease = false;
-      s_waitReleaseLogged = false;
-    } else if (!s_waitReleaseLogged) {
-      LOG_TASK("waiting for touch release after transition");
-      s_waitReleaseLogged = true;
     }
 
     return;
-  }
-
-  if (s_ignoreActiveLogged) {
-    LOG_TASK("touch input ignore ended");
-    s_ignoreActiveLogged = false;
   }
 
   if (!pressed) {
@@ -328,13 +304,7 @@ void begin(uint16_t screenWidth, uint16_t screenHeight) {
 }
 
 void resetState() {
-  s_lastPoint = {0, 0};
   s_waitForPhysicalRelease = true;
-  s_waitReleaseLogged = false;
-  lv_indev_reset(nullptr, nullptr);
-  if (s_inputDevice != nullptr) {
-    lv_indev_reset_long_press(s_inputDevice);
-  }
 }
 
 void ignoreInputFor(uint32_t durationMs) {
@@ -345,7 +315,6 @@ void ignoreInputFor(uint32_t durationMs) {
     s_ignoreUntilMs = requestedUntilMs;
   }
 
-  s_ignoreActiveLogged = false;
   resetState();
   LOG_TASK("touch input ignore start duration=%lu",
            static_cast<unsigned long>(durationMs));

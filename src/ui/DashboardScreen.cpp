@@ -104,6 +104,7 @@ Page s_pendingPage = Page::Dashboard;
 bool s_pendingPageValid = false;
 const char* s_pendingReason = nullptr;
 uint32_t s_pendingInputIgnoreMs = 0;
+bool s_inputWasSettling = false;
 lv_timer_t* s_calibrationTimer = nullptr;
 TouchCalibrationSample s_calibrationSamples[5];
 uint8_t s_calibrationPointIndex = 0;
@@ -414,14 +415,15 @@ void requestPage(Page page, const char* reason, uint32_t inputIgnoreMs = Navigat
     return;
   }
 
-  LOG_TASK("page transition requested %s -> %s reason=%s",
-           pageName(s_currentPage),
-           pageName(page),
-           reason != nullptr ? reason : "navigation");
+  const Page fromPage = s_currentPage;
   s_pendingPage = page;
   s_pendingPageValid = true;
   s_pendingReason = reason;
   s_pendingInputIgnoreMs = inputIgnoreMs;
+  LOG_TASK("page transition requested %s -> %s reason=%s pending=1",
+           pageName(fromPage),
+           pageName(page),
+           reason != nullptr ? reason : "navigation");
 }
 
 void processPendingNavigation() {
@@ -433,7 +435,16 @@ void processPendingNavigation() {
   const char* reason = s_pendingReason;
   s_pendingPageValid = false;
   s_pendingReason = nullptr;
+  LOG_TASK("tick sees pending navigation target=%s", pageName(page));
   applyPage(page, reason);
+}
+
+void logInputSettlingState() {
+  const bool settling = TouchInput::isInputIgnored();
+  if (s_inputWasSettling && !settling) {
+    LOG_TASK("touch released/input ready after transition");
+  }
+  s_inputWasSettling = settling;
 }
 
 bool shouldHandleRelease(lv_event_t* event) {
@@ -468,9 +479,11 @@ void sendResetCredentialsCommand() {
 }
 
 void onGearButton(lv_event_t* event) {
+  LOG_TASK("gear callback entered");
   if (shouldHandleRelease(event)) {
     requestPage(Page::Settings, "Dashboard -> Settings");
   }
+  LOG_TASK("gear callback exited");
 }
 
 void onForecastButton(lv_event_t* event) {
@@ -522,10 +535,12 @@ void onCalibrateTouchButton(lv_event_t* event) {
 }
 
 void onBackButton(lv_event_t* event) {
+  LOG_TASK("settings back callback entered");
   if (shouldHandleRelease(event)) {
     LOG_TASK("settings back released");
     requestPage(Page::Dashboard, "Settings -> Dashboard");
   }
+  LOG_TASK("settings back callback exited");
 }
 
 void onResetButton(lv_event_t* event) {
@@ -535,10 +550,12 @@ void onResetButton(lv_event_t* event) {
 }
 
 void onCancelButton(lv_event_t* event) {
+  LOG_TASK("cancel callback entered");
   if (shouldHandleRelease(event)) {
     LOG_TASK("cancel released");
     requestPage(Page::Settings, "ResetConfirm -> Settings");
   }
+  LOG_TASK("cancel callback exited");
 }
 
 void onEraseButton(lv_event_t* event) {
@@ -1158,6 +1175,7 @@ void create(QueueHandle_t commandQueue) {
 
 void tick() {
   processPendingNavigation();
+  logInputSettlingState();
 }
 
 void update(const AppState& state) {
