@@ -34,7 +34,6 @@ void uiTaskMain(void*) {
 
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t lastUiUpdateMs = 0;
-  uint32_t lastHeartbeatMs = 0;
 
   for (;;) {
     const uint32_t nowMs = millis();
@@ -47,15 +46,8 @@ void uiTaskMain(void*) {
       DashboardScreen::update(snapshot);
     }
 
-    DashboardScreen::tick();
     LvglPort::tick();
     LvglPort::handleTimers();
-    DashboardScreen::tick();
-
-    if (nowMs - lastHeartbeatMs >= 2000UL) {
-      lastHeartbeatMs = nowMs;
-      LOG_TASK("heartbeat heap=%lu", static_cast<unsigned long>(ESP.getFreeHeap()));
-    }
 
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(AppConfig::UiLoopPeriodMs));
   }

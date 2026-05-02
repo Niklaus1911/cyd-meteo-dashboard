@@ -9,8 +9,6 @@
 #include "app/AppStateStore.h"
 #include "app/UserSettings.h"
 #include "display/DisplayConfig.h"
-#include "display/TftDisplay.h"
-#include "ui/TouchInput.h"
 
 namespace {
 
@@ -44,15 +42,6 @@ enum class Page : uint8_t {
   ResetConfirm,
   Resetting,
   Forecast,
-  TouchCalibration,
-};
-
-struct TouchCalibrationSample {
-  int32_t rawX = 0;
-  int32_t rawY = 0;
-  int32_t rawZ = 0;
-  lv_coord_t targetX = 0;
-  lv_coord_t targetY = 0;
 };
 
 QueueHandle_t s_commandQueue = nullptr;
@@ -62,7 +51,6 @@ lv_obj_t* s_settingsPage = nullptr;
 lv_obj_t* s_confirmPage = nullptr;
 lv_obj_t* s_resettingPage = nullptr;
 lv_obj_t* s_forecastPage = nullptr;
-lv_obj_t* s_touchCalibrationPage = nullptr;
 
 lv_obj_t* s_wifiBadge = nullptr;
 lv_obj_t* s_mqttBadge = nullptr;
@@ -81,7 +69,6 @@ lv_obj_t* s_settingsExpected = nullptr;
 lv_obj_t* s_settingsStale = nullptr;
 lv_obj_t* s_settingsHeap = nullptr;
 lv_obj_t* s_settingsOrientation = nullptr;
-lv_obj_t* s_settingsTouch = nullptr;
 lv_obj_t* s_eraseButton = nullptr;
 lv_obj_t* s_resettingTitle = nullptr;
 lv_obj_t* s_resettingDetail = nullptr;
@@ -92,43 +79,14 @@ lv_obj_t* s_forecastAlert = nullptr;
 lv_obj_t* s_forecastUpdated = nullptr;
 lv_obj_t* s_forecastText = nullptr;
 lv_obj_t* s_forecastLowSummary = nullptr;
-lv_obj_t* s_calibrationInstruction = nullptr;
-lv_obj_t* s_calibrationPointLabel = nullptr;
-lv_obj_t* s_calibrationDot = nullptr;
-lv_obj_t* s_calibrationHorizontal = nullptr;
-lv_obj_t* s_calibrationVertical = nullptr;
 bool s_orientationRestartPending = false;
 uint32_t s_orientationRestartAtMs = 0;
-Page s_currentPage = Page::Dashboard;
-Page s_pendingPage = Page::Dashboard;
-bool s_pendingPageValid = false;
-const char* s_pendingReason = nullptr;
-uint32_t s_pendingInputIgnoreMs = 0;
-bool s_inputWasSettling = false;
-lv_timer_t* s_calibrationTimer = nullptr;
-TouchCalibrationSample s_calibrationSamples[5];
-uint8_t s_calibrationPointIndex = 0;
-uint8_t s_calibrationSampleCount = 0;
-bool s_calibrationWaitingRelease = false;
-uint32_t s_calibrationFinishAtMs = 0;
-int32_t s_calibrationRawXTotal = 0;
-int32_t s_calibrationRawYTotal = 0;
-int32_t s_calibrationRawZTotal = 0;
-
-constexpr uint8_t CalibrationPointCount = 5;
-constexpr uint8_t CalibrationSamplesPerPoint = 8;
-constexpr uint32_t NavigationInputIgnoreMs = 300;
-constexpr uint32_t CalibrationReturnInputIgnoreMs = 500;
-constexpr lv_coord_t CalibrationTargetX[CalibrationPointCount] = {20, 299, 299, 20, 160};
-constexpr lv_coord_t CalibrationTargetY[CalibrationPointCount] = {20, 20, 219, 219, 120};
 
 MetricCard s_temperature;
 MetricCard s_humidity;
 MetricCard s_pressure;
 MetricCard s_battery;
 MetricCard s_solar;
-
-void startTouchCalibration();
 
 lv_obj_t* createLabel(lv_obj_t* parent,
                       const char* text,
@@ -232,7 +190,7 @@ lv_obj_t* createButton(lv_obj_t* parent,
   lv_obj_set_size(button, width, height);
   styleButton(button, color);
   if (callback != nullptr) {
-    lv_obj_add_event_cb(button, callback, LV_EVENT_RELEASED, nullptr);
+    lv_obj_add_event_cb(button, callback, LV_EVENT_ALL, nullptr);
   }
 
   lv_obj_t* label = lv_label_create(button);
@@ -308,34 +266,7 @@ void setBadge(lv_obj_t* badge, const char* text, uint32_t bgColor, uint32_t text
   lv_obj_set_style_text_color(badge, lv_color_hex(textColor), 0);
 }
 
-const char* pageName(Page page) {
-  switch (page) {
-    case Page::Dashboard:
-      return "Dashboard";
-    case Page::Settings:
-      return "Settings";
-    case Page::ResetConfirm:
-      return "ResetConfirm";
-    case Page::Resetting:
-      return "Resetting";
-    case Page::Forecast:
-      return "Forecast";
-    case Page::TouchCalibration:
-      return "TouchCalibration";
-  }
-
-  return "?";
-}
-
-bool inputIgnored() {
-  return TouchInput::isInputIgnored();
-}
-
-void ignoreInputFor(uint32_t durationMs) {
-  TouchInput::ignoreInputFor(durationMs);
-}
-
-void applyPage(Page page, const char* reason) {
+void showPage(Page page) {
   if (s_dashboardPage != nullptr) {
     lv_obj_add_flag(s_dashboardPage, LV_OBJ_FLAG_HIDDEN);
   }
@@ -350,9 +281,6 @@ void applyPage(Page page, const char* reason) {
   }
   if (s_forecastPage != nullptr) {
     lv_obj_add_flag(s_forecastPage, LV_OBJ_FLAG_HIDDEN);
-  }
-  if (s_touchCalibrationPage != nullptr) {
-    lv_obj_add_flag(s_touchCalibrationPage, LV_OBJ_FLAG_HIDDEN);
   }
 
   lv_obj_t* visiblePage = nullptr;
@@ -372,99 +300,12 @@ void applyPage(Page page, const char* reason) {
     case Page::Forecast:
       visiblePage = s_forecastPage;
       break;
-    case Page::TouchCalibration:
-      visiblePage = s_touchCalibrationPage;
-      break;
   }
 
   if (visiblePage != nullptr) {
-    const Page previousPage = s_currentPage;
     lv_obj_clear_flag(visiblePage, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(visiblePage);
-    s_currentPage = page;
-    if (s_pendingInputIgnoreMs > 0) {
-      ignoreInputFor(s_pendingInputIgnoreMs);
-    } else {
-      TouchInput::resetState();
-    }
-    LOG_TASK("page transition %s -> %s reason=%s",
-             pageName(previousPage),
-             pageName(page),
-             reason != nullptr ? reason : "navigation");
   }
-}
-
-void requestPage(Page page, const char* reason, uint32_t inputIgnoreMs = NavigationInputIgnoreMs) {
-  if (inputIgnored()) {
-    LOG_TASK("page transition ignored target=%s reason=%s input_settling=1",
-             pageName(page),
-             reason != nullptr ? reason : "navigation");
-    return;
-  }
-
-  if (s_pendingPageValid) {
-    LOG_TASK("page transition ignored target=%s reason=%s pending=%s",
-             pageName(page),
-             reason != nullptr ? reason : "navigation",
-             pageName(s_pendingPage));
-    return;
-  }
-
-  if (s_currentPage == page) {
-    ignoreInputFor(inputIgnoreMs);
-    return;
-  }
-
-  const Page fromPage = s_currentPage;
-  s_pendingPage = page;
-  s_pendingPageValid = true;
-  s_pendingReason = reason;
-  s_pendingInputIgnoreMs = inputIgnoreMs;
-  LOG_TASK("page transition requested %s -> %s reason=%s pending=1",
-           pageName(fromPage),
-           pageName(page),
-           reason != nullptr ? reason : "navigation");
-}
-
-void processPendingNavigation() {
-  if (!s_pendingPageValid) {
-    return;
-  }
-
-  const Page page = s_pendingPage;
-  const char* reason = s_pendingReason;
-  s_pendingPageValid = false;
-  s_pendingReason = nullptr;
-  LOG_TASK("tick sees pending navigation target=%s", pageName(page));
-  applyPage(page, reason);
-}
-
-void logInputSettlingState() {
-  const bool settling = TouchInput::isInputIgnored();
-  if (s_inputWasSettling && !settling) {
-    LOG_TASK("touch released/input ready after transition");
-  }
-  s_inputWasSettling = settling;
-}
-
-bool shouldHandleRelease(lv_event_t* event) {
-  if (lv_event_get_code(event) != LV_EVENT_RELEASED) {
-    return false;
-  }
-
-  if (inputIgnored()) {
-    LOG_TASK("button release ignored while input settles page=%s", pageName(s_currentPage));
-    return false;
-  }
-
-  if (s_pendingPageValid) {
-    LOG_TASK("button release ignored while navigation pending page=%s target=%s",
-             pageName(s_currentPage),
-             pageName(s_pendingPage));
-    return false;
-  }
-
-  return true;
 }
 
 void sendResetCredentialsCommand() {
@@ -479,31 +320,35 @@ void sendResetCredentialsCommand() {
 }
 
 void onGearButton(lv_event_t* event) {
-  LOG_TASK("gear callback entered");
-  if (shouldHandleRelease(event)) {
-    requestPage(Page::Settings, "Dashboard -> Settings");
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("gear button pressed");
+  } else if (code == LV_EVENT_RELEASED) {
+    LOG_TASK("opening settings screen");
+    showPage(Page::Settings);
   }
-  LOG_TASK("gear callback exited");
 }
 
 void onForecastButton(lv_event_t* event) {
-  if (shouldHandleRelease(event)) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_RELEASED) {
     if (s_forecastContent != nullptr) {
       lv_obj_scroll_to_y(s_forecastContent, 0, LV_ANIM_OFF);
     }
-    requestPage(Page::Forecast, "Settings -> Forecast");
+    showPage(Page::Forecast);
   }
 }
 
 void onForecastBackButton(lv_event_t* event) {
-  if (shouldHandleRelease(event)) {
-    LOG_TASK("forecast back released");
-    requestPage(Page::Settings, "Forecast -> Settings");
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_RELEASED) {
+    showPage(Page::Settings);
   }
 }
 
 void onRotateDisplayButton(lv_event_t* event) {
-  if (!shouldHandleRelease(event) || s_orientationRestartPending) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code != LV_EVENT_RELEASED || s_orientationRestartPending) {
     return;
   }
 
@@ -523,53 +368,59 @@ void onRotateDisplayButton(lv_event_t* event) {
 
   setLabel(s_resettingTitle, "Saving orientation...");
   setLabel(s_resettingDetail, "Rebooting...");
-  requestPage(Page::Resetting, "Settings -> Resetting orientation");
+  showPage(Page::Resetting);
   s_orientationRestartPending = true;
   s_orientationRestartAtMs = millis() + 800UL;
 }
 
-void onCalibrateTouchButton(lv_event_t* event) {
-  if (shouldHandleRelease(event)) {
-    startTouchCalibration();
-  }
-}
-
 void onBackButton(lv_event_t* event) {
-  LOG_TASK("settings back callback entered");
-  if (shouldHandleRelease(event)) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("settings back pressed");
+  } else if (code == LV_EVENT_RELEASED) {
     LOG_TASK("settings back released");
-    requestPage(Page::Dashboard, "Settings -> Dashboard");
+    showPage(Page::Dashboard);
   }
-  LOG_TASK("settings back callback exited");
 }
 
 void onResetButton(lv_event_t* event) {
-  if (shouldHandleRelease(event)) {
-    requestPage(Page::ResetConfirm, "Settings -> ResetConfirm");
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("reset pressed");
+  } else if (code == LV_EVENT_RELEASED) {
+    LOG_TASK("reset released");
+    showPage(Page::ResetConfirm);
   }
 }
 
 void onCancelButton(lv_event_t* event) {
-  LOG_TASK("cancel callback entered");
-  if (shouldHandleRelease(event)) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("cancel pressed");
+  } else if (code == LV_EVENT_RELEASED) {
     LOG_TASK("cancel released");
-    requestPage(Page::Settings, "ResetConfirm -> Settings");
+    showPage(Page::Settings);
   }
-  LOG_TASK("cancel callback exited");
 }
 
 void onEraseButton(lv_event_t* event) {
-  if (!shouldHandleRelease(event)) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED) {
+    LOG_TASK("erase pressed");
+    return;
+  }
+  if (code != LV_EVENT_RELEASED) {
     return;
   }
 
+  LOG_TASK("erase released");
   if (s_eraseButton != nullptr) {
     lv_obj_add_state(s_eraseButton, LV_STATE_DISABLED);
   }
 
   setLabel(s_resettingTitle, "Resetting...");
   setLabel(s_resettingDetail, "Rebooting to setup mode");
-  requestPage(Page::Resetting, "ResetConfirm -> Resetting");
+  showPage(Page::Resetting);
   sendResetCredentialsCommand();
 }
 
@@ -666,236 +517,6 @@ void setPrefixedForecastLabel(lv_obj_t* label,
   setLabel(label, buffer);
 }
 
-int32_t averagePair(int32_t a, int32_t b) {
-  return (a + b) / 2;
-}
-
-int32_t extrapolateRawAt(int32_t rawAtTargetA,
-                         int32_t rawAtTargetB,
-                         int32_t targetA,
-                         int32_t targetB,
-                         int32_t desiredTarget) {
-  if (targetA == targetB) {
-    return rawAtTargetA;
-  }
-
-  return rawAtTargetA +
-         ((rawAtTargetB - rawAtTargetA) * (desiredTarget - targetA)) /
-             (targetB - targetA);
-}
-
-int16_t axisOffsetFromCenter(int32_t centerRaw,
-                             int32_t rawMin,
-                             int32_t rawMax,
-                             uint16_t outputSize,
-                             bool invert,
-                             int32_t desiredTarget) {
-  const int32_t outputMax = static_cast<int32_t>(outputSize) - 1;
-  const int32_t mapped = constrain(map(centerRaw, rawMin, rawMax, 0, outputMax), 0, outputMax);
-  const int32_t oriented = invert ? outputMax - mapped : mapped;
-  return static_cast<int16_t>(desiredTarget - oriented);
-}
-
-void moveCalibrationTarget() {
-  if (s_calibrationPointIndex >= CalibrationPointCount) {
-    return;
-  }
-
-  const lv_coord_t x = CalibrationTargetX[s_calibrationPointIndex];
-  const lv_coord_t y = CalibrationTargetY[s_calibrationPointIndex];
-  lv_obj_set_pos(s_calibrationDot, x - 5, y - 5);
-  lv_obj_set_pos(s_calibrationHorizontal, x - 14, y - 1);
-  lv_obj_set_pos(s_calibrationVertical, x - 1, y - 14);
-
-  char buffer[24] = {};
-  snprintf(buffer,
-           sizeof(buffer),
-           "Point %u/%u",
-           s_calibrationPointIndex + 1,
-           CalibrationPointCount);
-  setLabel(s_calibrationPointLabel, buffer);
-  setLabel(s_calibrationInstruction, "Touch the dot");
-}
-
-bool calculateTouchCalibration(TouchCalibrationData& calibration) {
-  const bool flipped = TftDisplay::isFlipped180();
-  const int32_t maxX = 319;
-  const int32_t maxY = 239;
-
-  int32_t rawLeftXTotal = 0;
-  int32_t rawRightXTotal = 0;
-  int32_t rawTopYTotal = 0;
-  int32_t rawBottomYTotal = 0;
-  uint8_t leftCount = 0;
-  uint8_t rightCount = 0;
-  uint8_t topCount = 0;
-  uint8_t bottomCount = 0;
-
-  for (uint8_t i = 0; i < 4; ++i) {
-    const int32_t unflippedX = flipped ? maxX - s_calibrationSamples[i].targetX
-                                       : s_calibrationSamples[i].targetX;
-    const int32_t unflippedY = flipped ? maxY - s_calibrationSamples[i].targetY
-                                       : s_calibrationSamples[i].targetY;
-
-    if (unflippedX < 160) {
-      rawLeftXTotal += s_calibrationSamples[i].rawX;
-      ++leftCount;
-    } else {
-      rawRightXTotal += s_calibrationSamples[i].rawX;
-      ++rightCount;
-    }
-
-    if (unflippedY < 120) {
-      rawTopYTotal += s_calibrationSamples[i].rawY;
-      ++topCount;
-    } else {
-      rawBottomYTotal += s_calibrationSamples[i].rawY;
-      ++bottomCount;
-    }
-  }
-
-  if (leftCount == 0 || rightCount == 0 || topCount == 0 || bottomCount == 0) {
-    return false;
-  }
-
-  const int32_t rawLeftX = rawLeftXTotal / leftCount;
-  const int32_t rawRightX = rawRightXTotal / rightCount;
-  const int32_t rawTopY = rawTopYTotal / topCount;
-  const int32_t rawBottomY = rawBottomYTotal / bottomCount;
-
-  const int32_t rawX0 = extrapolateRawAt(rawLeftX, rawRightX, 20, 299, 0);
-  const int32_t rawXMax = extrapolateRawAt(rawLeftX, rawRightX, 20, 299, maxX);
-  const int32_t rawY0 = extrapolateRawAt(rawTopY, rawBottomY, 20, 219, 0);
-  const int32_t rawYMax = extrapolateRawAt(rawTopY, rawBottomY, 20, 219, maxY);
-
-  calibration.rawMinX = min(rawX0, rawXMax);
-  calibration.rawMaxX = max(rawX0, rawXMax);
-  calibration.rawMinY = min(rawY0, rawYMax);
-  calibration.rawMaxY = max(rawY0, rawYMax);
-  calibration.swapXY = false;
-  calibration.invertX = rawX0 > rawXMax;
-  calibration.invertY = rawY0 > rawYMax;
-
-  const TouchCalibrationSample& center = s_calibrationSamples[4];
-  const int32_t centerTargetX = flipped ? maxX - center.targetX : center.targetX;
-  const int32_t centerTargetY = flipped ? maxY - center.targetY : center.targetY;
-  calibration.offsetX = axisOffsetFromCenter(center.rawX,
-                                             calibration.rawMinX,
-                                             calibration.rawMaxX,
-                                             320,
-                                             calibration.invertX,
-                                             centerTargetX);
-  calibration.offsetY = axisOffsetFromCenter(center.rawY,
-                                             calibration.rawMinY,
-                                             calibration.rawMaxY,
-                                             240,
-                                             calibration.invertY,
-                                             centerTargetY);
-
-  return calibration.rawMaxX - calibration.rawMinX > 1000 &&
-         calibration.rawMaxY - calibration.rawMinY > 1000;
-}
-
-void finishTouchCalibration(bool saved) {
-  if (s_calibrationTimer != nullptr) {
-    lv_timer_pause(s_calibrationTimer);
-  }
-
-  setLabel(s_calibrationInstruction, saved ? "Calibration saved" : "Calibration failed");
-  setLabel(s_calibrationPointLabel, saved ? "Returning to Settings" : "Previous calibration kept");
-  setHidden(s_calibrationDot, true);
-  setHidden(s_calibrationHorizontal, true);
-  setHidden(s_calibrationVertical, true);
-  s_calibrationFinishAtMs = millis() + 1200UL;
-}
-
-void acceptCalibrationPoint() {
-  TouchCalibrationSample& sample = s_calibrationSamples[s_calibrationPointIndex];
-  sample.rawX = s_calibrationRawXTotal / s_calibrationSampleCount;
-  sample.rawY = s_calibrationRawYTotal / s_calibrationSampleCount;
-  sample.rawZ = s_calibrationRawZTotal / s_calibrationSampleCount;
-  sample.targetX = CalibrationTargetX[s_calibrationPointIndex];
-  sample.targetY = CalibrationTargetY[s_calibrationPointIndex];
-
-  LOG_TASK("touch calibration point=%u target=(%d,%d) raw=(%ld,%ld,%ld)",
-           s_calibrationPointIndex + 1,
-           sample.targetX,
-           sample.targetY,
-           static_cast<long>(sample.rawX),
-           static_cast<long>(sample.rawY),
-           static_cast<long>(sample.rawZ));
-
-  ++s_calibrationPointIndex;
-  s_calibrationSampleCount = 0;
-  s_calibrationRawXTotal = 0;
-  s_calibrationRawYTotal = 0;
-  s_calibrationRawZTotal = 0;
-  s_calibrationWaitingRelease = true;
-
-  if (s_calibrationPointIndex >= CalibrationPointCount) {
-    TouchCalibrationData calibration;
-    const bool calculated = calculateTouchCalibration(calibration);
-    finishTouchCalibration(calculated && TouchInput::saveCalibration(calibration));
-    return;
-  }
-
-  moveCalibrationTarget();
-}
-
-void onCalibrationTimer(lv_timer_t*) {
-  if (s_currentPage != Page::TouchCalibration) {
-    return;
-  }
-
-  TouchInput::RawPoint rawPoint;
-  const bool pressed = TouchInput::readRawPoint(rawPoint);
-
-  if (s_calibrationWaitingRelease) {
-    if (!pressed) {
-      s_calibrationWaitingRelease = false;
-    }
-    return;
-  }
-
-  if (!pressed) {
-    s_calibrationSampleCount = 0;
-    s_calibrationRawXTotal = 0;
-    s_calibrationRawYTotal = 0;
-    s_calibrationRawZTotal = 0;
-    return;
-  }
-
-  s_calibrationRawXTotal += rawPoint.x;
-  s_calibrationRawYTotal += rawPoint.y;
-  s_calibrationRawZTotal += rawPoint.z;
-  ++s_calibrationSampleCount;
-
-  if (s_calibrationSampleCount >= CalibrationSamplesPerPoint) {
-    acceptCalibrationPoint();
-  }
-}
-
-void startTouchCalibration() {
-  s_calibrationPointIndex = 0;
-  s_calibrationSampleCount = 0;
-  s_calibrationRawXTotal = 0;
-  s_calibrationRawYTotal = 0;
-  s_calibrationRawZTotal = 0;
-  s_calibrationWaitingRelease = true;
-  s_calibrationFinishAtMs = 0;
-
-  setHidden(s_calibrationDot, false);
-  setHidden(s_calibrationHorizontal, false);
-  setHidden(s_calibrationVertical, false);
-  moveCalibrationTarget();
-
-  if (s_calibrationTimer != nullptr) {
-    lv_timer_resume(s_calibrationTimer);
-  }
-
-  requestPage(Page::TouchCalibration, "Settings -> TouchCalibration");
-}
-
 }  // namespace
 
 namespace DashboardScreen {
@@ -913,7 +534,6 @@ void create(QueueHandle_t commandQueue) {
   s_confirmPage = createPage(screen);
   s_resettingPage = createPage(screen);
   s_forecastPage = createPage(screen);
-  s_touchCalibrationPage = createPage(screen);
 
   createLabel(s_dashboardPage, "ESP Meteo", &lv_font_montserrat_16, ColorText, 8, 6, 88);
 
@@ -932,7 +552,7 @@ void create(QueueHandle_t commandQueue) {
                               nullptr,
                               ColorPanel);
   lv_obj_set_style_text_font(lv_obj_get_child(s_gearButton, 0), &lv_font_montserrat_16, 0);
-  lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_RELEASED, nullptr);
+  lv_obj_add_event_cb(s_gearButton, onGearButton, LV_EVENT_ALL, nullptr);
 
   s_statusBadge = createBadge(s_dashboardPage, 8, 29, 76);
 
@@ -1016,25 +636,17 @@ void create(QueueHandle_t commandQueue) {
   s_settingsHeap = createLabel(s_settingsPage, "Heap: --", &lv_font_montserrat_12, ColorMuted, 166, 120, 140);
   s_settingsLast = createLabel(s_settingsPage, "Last: --", &lv_font_montserrat_12, ColorMuted, 14, 142, 136);
   s_settingsExpected = createLabel(s_settingsPage, "Expect: 10m", &lv_font_montserrat_12, ColorMuted, 166, 142, 140);
-  s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 158, 86);
+  s_settingsStale = createLabel(s_settingsPage, "Stale: 15m", &lv_font_montserrat_12, ColorMuted, 14, 160, 136);
   s_settingsOrientation = createLabel(s_settingsPage,
-                                      "Orient: Normal",
+                                      "Orientation: Normal",
                                       &lv_font_montserrat_12,
                                       ColorMuted,
-                                      104,
-                                      158,
-                                      88);
-  s_settingsTouch = createLabel(s_settingsPage,
-                                "Touch: Default",
-                                &lv_font_montserrat_12,
-                                ColorMuted,
-                                198,
-                                158,
-                                108);
-  createButton(s_settingsPage, "Forecast", 14, 172, 140, 28, onForecastButton, ColorPanelAlt);
-  createButton(s_settingsPage, "Calibrate Touch", 166, 172, 140, 28, onCalibrateTouchButton, ColorPanelAlt);
-  createButton(s_settingsPage, "Flip 180", 14, 204, 140, 28, onRotateDisplayButton, ColorPanelAlt);
-  createButton(s_settingsPage, "Reset WiFi/MQTT", 166, 204, 140, 28, onResetButton, ColorDestructive);
+                                      166,
+                                      160,
+                                      140);
+  createButton(s_settingsPage, "Forecast", 14, 184, 80, 42, onForecastButton, ColorPanelAlt);
+  createButton(s_settingsPage, "Flip 180", 102, 184, 80, 42, onRotateDisplayButton, ColorPanelAlt);
+  createButton(s_settingsPage, "Reset WiFi/MQTT", 190, 184, 116, 42, onResetButton, ColorDestructive);
 
   createLabel(s_confirmPage,
               "Erase saved WiFi and MQTT settings?",
@@ -1124,58 +736,7 @@ void create(QueueHandle_t commandQueue) {
                                             292);
   setForecastDetailsVisible(false);
 
-  lv_obj_set_style_bg_color(s_touchCalibrationPage, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_text_color(s_touchCalibrationPage, lv_color_hex(0x000000), 0);
-  s_calibrationInstruction = createLabel(s_touchCalibrationPage,
-                                         "Touch the dot",
-                                         &lv_font_montserrat_20,
-                                         0x000000,
-                                         40,
-                                         92,
-                                         240);
-  lv_obj_set_style_text_align(s_calibrationInstruction, LV_TEXT_ALIGN_CENTER, 0);
-  s_calibrationPointLabel = createLabel(s_touchCalibrationPage,
-                                        "Point 1/5",
-                                        &lv_font_montserrat_14,
-                                        0x000000,
-                                        70,
-                                        124,
-                                        180);
-  lv_obj_set_style_text_align(s_calibrationPointLabel, LV_TEXT_ALIGN_CENTER, 0);
-
-  s_calibrationDot = lv_obj_create(s_touchCalibrationPage);
-  lv_obj_set_size(s_calibrationDot, 10, 10);
-  lv_obj_set_style_radius(s_calibrationDot, 5, 0);
-  lv_obj_set_style_bg_color(s_calibrationDot, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_bg_opa(s_calibrationDot, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(s_calibrationDot, 0, 0);
-  lv_obj_clear_flag(s_calibrationDot, LV_OBJ_FLAG_SCROLLABLE);
-
-  s_calibrationHorizontal = lv_obj_create(s_touchCalibrationPage);
-  lv_obj_set_size(s_calibrationHorizontal, 28, 2);
-  lv_obj_set_style_bg_color(s_calibrationHorizontal, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_bg_opa(s_calibrationHorizontal, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(s_calibrationHorizontal, 0, 0);
-  lv_obj_clear_flag(s_calibrationHorizontal, LV_OBJ_FLAG_SCROLLABLE);
-
-  s_calibrationVertical = lv_obj_create(s_touchCalibrationPage);
-  lv_obj_set_size(s_calibrationVertical, 2, 28);
-  lv_obj_set_style_bg_color(s_calibrationVertical, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_bg_opa(s_calibrationVertical, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(s_calibrationVertical, 0, 0);
-  lv_obj_clear_flag(s_calibrationVertical, LV_OBJ_FLAG_SCROLLABLE);
-  s_calibrationTimer = lv_timer_create(onCalibrationTimer, 30, nullptr);
-  lv_timer_pause(s_calibrationTimer);
-  setHidden(s_calibrationDot, true);
-  setHidden(s_calibrationHorizontal, true);
-  setHidden(s_calibrationVertical, true);
-
-  applyPage(Page::Dashboard, "initial");
-}
-
-void tick() {
-  processPendingNavigation();
-  logInputSettlingState();
+  showPage(Page::Dashboard);
 }
 
 void update(const AppState& state) {
@@ -1248,14 +809,9 @@ void update(const AppState& state) {
 
   snprintf(buffer,
            sizeof(buffer),
-           "Orient: %s",
+           "Orientation: %s",
            state.displayFlipped180 ? "Flipped" : "Normal");
   setLabel(s_settingsOrientation, buffer);
-  snprintf(buffer,
-           sizeof(buffer),
-           "Touch: %s",
-           TouchInput::isCalibrationSaved() ? "Cal" : "Default");
-  setLabel(s_settingsTouch, buffer);
 
   if (!state.forecastValid) {
     setHidden(s_forecastNoData, false);
@@ -1277,26 +833,11 @@ void update(const AppState& state) {
     setLabel(s_resettingTitle, state.credentialResetting ? "Resetting..." : "Reset requested");
     setLabel(s_resettingDetail,
              state.credentialRebooting ? "Rebooting to setup mode" : "Preparing reboot...");
-    if (s_currentPage != Page::Resetting &&
-        !(s_pendingPageValid && s_pendingPage == Page::Resetting)) {
-      requestPage(Page::Resetting, "Reset state -> Resetting");
-    }
+    showPage(Page::Resetting);
   }
 
   if (s_orientationRestartPending && millis() >= s_orientationRestartAtMs) {
     ESP.restart();
-  }
-
-  if (s_calibrationFinishAtMs > 0 && millis() >= s_calibrationFinishAtMs) {
-    TouchInput::RawPoint rawPoint;
-    if (TouchInput::readRawPoint(rawPoint)) {
-      return;
-    }
-
-    s_calibrationFinishAtMs = 0;
-    requestPage(Page::Settings,
-                "TouchCalibration -> Settings",
-                CalibrationReturnInputIgnoreMs);
   }
 
   const bool hasData = state.latestSensor.valid;
