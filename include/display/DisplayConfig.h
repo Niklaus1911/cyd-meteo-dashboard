@@ -8,8 +8,11 @@ namespace DisplayConfig {
 constexpr int BacklightPin = 21;
 constexpr bool BacklightActiveHigh = true;
 
+constexpr uint8_t NormalDisplayRotation = 1;
+constexpr uint8_t FlippedDisplayRotation = 3;
+
 // If the orientation is wrong, change this value through 0, 1, 2, 3 and rebuild.
-constexpr uint8_t Rotation = 1;
+constexpr uint8_t Rotation = NormalDisplayRotation;
 
 // If colors look like a photo negative, toggle this value and rebuild.
 constexpr bool InvertColors = true;

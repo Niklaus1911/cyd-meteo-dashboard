@@ -51,6 +51,10 @@ bool updateUptime(uint32_t uptimeMs, TickType_t timeoutTicks = pdMS_TO_TICKS(20)
 
 bool updateFreeHeap(uint32_t freeHeapBytes, TickType_t timeoutTicks = pdMS_TO_TICKS(20));
 
+bool setDisplayOrientation(bool flipped180,
+                           uint8_t rotation,
+                           TickType_t timeoutTicks = pdMS_TO_TICKS(20));
+
 SemaphoreHandle_t mutexHandle();
 
 }  // namespace AppStateStore

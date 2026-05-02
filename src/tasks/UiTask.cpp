@@ -8,6 +8,7 @@
 #include "app/AppStateStore.h"
 #include "ui/DashboardScreen.h"
 #include "ui/LvglPort.h"
+#include "display/TftDisplay.h"
 
 namespace {
 
@@ -27,6 +28,7 @@ void uiTaskMain(void*) {
   LOG_TASK("started");
   logStackHighWaterMarkNow("at start");
   LvglPort::begin();
+  AppStateStore::setDisplayOrientation(TftDisplay::isFlipped180(), TftDisplay::rotation(), 0);
   DashboardScreen::create(s_commandQueue);
   logStackHighWaterMarkNow("after LVGL init");
 
