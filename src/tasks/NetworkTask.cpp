@@ -54,6 +54,69 @@ void copyString(char* destination, size_t destinationSize, const char* source) {
   destination[destinationSize - 1] = '\0';
 }
 
+void sanitizeZambrettiPayload(char* payload, size_t bufferSize) {
+  if (payload == nullptr || bufferSize < 2) {
+    return;
+  }
+
+  char temp[AppConfig::MqttPayloadMaxLength];
+  size_t w = 0;
+  size_t r = 0;
+
+  while (payload[r] != '\0' && r < bufferSize && w < sizeof(temp) - 1) {
+    const unsigned char c = static_cast<unsigned char>(payload[r]);
+
+    if (c < 0x80) {
+      if (c >= 0x20 || c == '\n') {
+        temp[w++] = payload[r];
+      }
+      r++;
+      continue;
+    }
+
+    if ((c & 0xE0) == 0xC0 && r + 1 < bufferSize && payload[r + 1] != '\0') {
+      const unsigned char c2 = static_cast<unsigned char>(payload[r + 1]);
+      if ((c2 & 0xC0) == 0x80) {
+        if (c == 0xCE && c2 == 0x94) {
+          if (w + 5 < sizeof(temp)) {
+            temp[w++] = 'd';
+            temp[w++] = 'e';
+            temp[w++] = 'l';
+            temp[w++] = 't';
+            temp[w++] = 'a';
+          }
+          r += 2;
+          continue;
+        }
+        if (c == 0xC2 || c == 0xC3) {
+          temp[w++] = payload[r];
+          temp[w++] = payload[r + 1];
+          r += 2;
+          continue;
+        }
+      }
+      r += 2;
+      continue;
+    }
+
+    if ((c & 0xF0) == 0xE0) {
+      r += 3;
+      continue;
+    }
+
+    if ((c & 0xF8) == 0xF0) {
+      r += 4;
+      continue;
+    }
+
+    r++;
+  }
+
+  temp[w] = '\0';
+  strncpy(payload, temp, bufferSize - 1);
+  payload[bufferSize - 1] = '\0';
+}
+
 const char* mqttStateReason(int state) {
   switch (state) {
     case MQTT_CONNECTION_TIMEOUT:
@@ -541,8 +604,11 @@ void maintainMqtt(uint32_t nowMs) {
 void parseTelemetryMessage(const MqttInboundMessage& message) {
   const ForecastTopic* forecastTopic = findForecastTopic(message.topic);
   if (forecastTopic != nullptr) {
+    char sanitized[AppConfig::MqttPayloadMaxLength];
+    copyString(sanitized, sizeof(sanitized), message.payload);
+    sanitizeZambrettiPayload(sanitized, sizeof(sanitized));
     if (!AppStateStore::updateForecastValue(forecastTopic->field,
-                                            message.payload,
+                                            sanitized,
                                             message.receivedAtMs,
                                             0)) {
       LOG_TASK("failed to update AppState for forecast label='%s'", forecastTopic->label);
