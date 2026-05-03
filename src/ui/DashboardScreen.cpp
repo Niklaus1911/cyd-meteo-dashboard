@@ -644,7 +644,7 @@ void create(QueueHandle_t commandQueue) {
                                       166,
                                       160,
                                       140);
-  createButton(s_settingsPage, "Forecast", 14, 184, 80, 42, onForecastButton, ColorPanelAlt);
+  createButton(s_settingsPage, "Forecast", 14, 184, 80, 42, onForecastButton, ColorGreen);
   createButton(s_settingsPage, "Flip 180", 102, 184, 80, 42, onRotateDisplayButton, ColorPanelAlt);
   createButton(s_settingsPage, "Reset WiFi/MQTT", 190, 184, 116, 42, onResetButton, ColorDestructive);
 
