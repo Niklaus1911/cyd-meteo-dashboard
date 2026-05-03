@@ -511,7 +511,7 @@ void setPrefixedForecastLabel(lv_obj_t* label,
                               const char* prefix,
                               const char* value,
                               const char* fallback) {
-  char buffer[448] = {};
+  char buffer[1152] = {};
   const char* displayValue = value != nullptr && value[0] != '\0' ? value : fallback;
   snprintf(buffer, sizeof(buffer), "%s%s", prefix, displayValue);
   setLabel(label, buffer);

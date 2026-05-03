@@ -66,7 +66,7 @@ constexpr uint32_t ConfigResetSampleMs = 50;
 constexpr uint32_t RestartAfterConfigResetMs = 1000;
 
 constexpr size_t MqttTopicMaxLength = 96;
-constexpr size_t MqttPayloadMaxLength = 512;
+constexpr size_t MqttPayloadMaxLength = 1024;
 constexpr size_t MqttHostMaxLength = 64;
 constexpr size_t MqttUserMaxLength = 48;
 constexpr size_t MqttPasswordMaxLength = 64;
