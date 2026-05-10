@@ -1,0 +1,23 @@
+CompileFlags:
+  CompilationDatabase: .
+  Add:
+    - --target=xtensa-esp-elf
+    - -isystem/home/giuseppe/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/include/c++/14.2.0
+    - -isystem/home/giuseppe/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/include/c++/14.2.0/xtensa-esp-elf/esp32
+    - -isystem/home/giuseppe/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/include/c++/14.2.0/backward
+    - -isystem/home/giuseppe/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/14.2.0/include
+    - -isystem/home/giuseppe/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/14.2.0/include-fixed
+    - -isystem/home/giuseppe/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/include
+    - "-D__GLIBC_USE(x)=1"
+  Remove:
+    - -mlongcalls
+    - -mdisable-hardware-atomics
+    - -mfix-esp32-psram-cache-issue
+    - -mfix-esp32-psram-cache-strategy=*
+    - -freorder-blocks
+    - -fstrict-volatile-bitfields
+    - -fno-jump-tables
+    - -fno-tree-switch-conversion
+
+Diagnostics:
+  UnusedIncludes: None
