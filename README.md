@@ -1,5 +1,11 @@
 # CYD Meteo Dashboard
 
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-orange)](https://platformio.org/)
+[![Framework](https://img.shields.io/badge/framework-Arduino-00979D)](https://www.arduino.cc/)
+[![UI](https://img.shields.io/badge/UI-LVGL%208.3-blue)](https://lvgl.io/)
+[![MQTT](https://img.shields.io/badge/MQTT-PubSubClient-660066)](https://pubsubclient.knolleary.net/)
+[![License](https://img.shields.io/badge/license-not%20specified-lightgrey)](#license)
+
 ESP32 weather dashboard firmware for the **CYD / Cheap Yellow Display 2 USB**.
 
 The project turns a CYD board into a compact MQTT dashboard for an ESPHome weather
