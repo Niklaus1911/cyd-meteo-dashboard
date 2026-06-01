@@ -1,35 +1,57 @@
 # CYD Meteo Dashboard
 
-Dashboard meteo per **CYD / Cheap Yellow Display 2 USB** basato su ESP32, Arduino, PlatformIO, LVGL e MQTT.
+ESP32 weather dashboard firmware for the **CYD / Cheap Yellow Display 2 USB**.
 
-Il progetto mostra su display ILI9341 i dati ricevuti da un nodo ESPHome remoto, con interfaccia touch resistiva XPT2046 e pagina impostazioni per azzerare le credenziali WiFi/MQTT salvate.
+The project turns a CYD board into a compact MQTT dashboard for an ESPHome weather
+sensor node. It shows outdoor temperature, humidity, pressure, solar panel data,
+18650 battery level, connection state, telemetry freshness, and a small
+Zambretti-style forecast page on the built-in ILI9341 touchscreen display.
 
-## Stato del progetto
+## Features
 
-- Display 320x240 in landscape, rotazione 1.
-- Tema scuro LVGL ottimizzato per CYD.
-- WiFi e MQTT configurabili tramite WiFiManager.
-- Topic sensori ESPHome hardcoded nel firmware.
-- Supporto touch resistivo calibrato.
-- Pagina Settings raggiungibile dal pulsante ingranaggio.
-- Reset sicuro delle credenziali WiFi/MQTT con conferma e riavvio.
+- 320x240 LVGL dashboard optimized for the CYD landscape display.
+- MQTT telemetry from an ESPHome sensor node.
+- WiFi and MQTT setup through a WiFiManager captive portal.
+- Touch-driven settings page with WiFi/MQTT credential reset.
+- Telemetry freshness states: `LIVE`, `STALE`, and `NO DATA`.
+- Persistent display rotation setting.
+- Hardcoded topic defaults that can be edited in `include/AppConfig.h`.
+- Separate FreeRTOS tasks for networking and UI rendering.
 
-## Hardware supportato
+## Tech Stack
 
-Configurazione verificata:
+- Board: ESP32 CYD / Cheap Yellow Display 2 USB.
+- Framework: Arduino on PlatformIO.
+- UI: LVGL `8.3.x`.
+- Display: TFT_eSPI with ILI9341.
+- Touch: XPT2046 resistive touchscreen.
+- Messaging: MQTT with PubSubClient.
+- Provisioning: WiFiManager.
 
-- Scheda: CYD / Cheap Yellow Display, versione 2 USB.
-- Display: ILI9341.
-- Driver TFT: `ILI9341_2_DRIVER`.
-- Rotazione: `1`.
-- Inversione colori: attiva.
-- Ordine colori: `TFT_BGR`.
-- Backlight: GPIO `21`.
-- Touch: XPT2046 resistivo.
+## Project Status
 
-Pin principali:
+The firmware is built for one verified hardware target: the ESP32 CYD 2 USB with
+ILI9341 display and XPT2046 touch. The dashboard is functional, but topic names,
+touch calibration, and display settings may need adjustment for other CYD variants
+or sensor setups.
 
-| Funzione | GPIO |
+## Hardware
+
+Verified configuration:
+
+| Part | Value |
+| --- | --- |
+| Board | CYD / Cheap Yellow Display 2 USB |
+| Display | ILI9341 |
+| TFT driver | `ILI9341_2_DRIVER` |
+| Resolution | 320x240 landscape |
+| Color order | `TFT_BGR` |
+| Backlight | GPIO `21` |
+| Touch | XPT2046 resistive |
+
+Main pins:
+
+| Function | GPIO |
 | --- | ---: |
 | TFT MOSI | 13 |
 | TFT MISO | 12 |
@@ -43,100 +65,153 @@ Pin principali:
 | Touch MISO | 39 |
 | Touch MOSI | 32 |
 
-## Dati visualizzati
+## Dashboard Data
 
-Il dashboard mostra:
+The main screen displays:
 
-- Temperatura esterna.
-- Umidità esterna.
-- Pressione assoluta.
-- Tensione pannello solare.
-- Corrente pannello solare.
-- Livello batteria 18650.
-- Stato WiFi/MQTT.
-- Stato telemetria: `LIVE`, `STALE`, `NO DATA`.
-- Età ultimo aggiornamento e uptime.
+- Outdoor temperature.
+- Outdoor humidity.
+- Absolute pressure.
+- Solar panel voltage.
+- Solar panel current.
+- 18650 battery level.
+- WiFi and MQTT connection state.
+- Last update age and uptime.
+- Telemetry state: `LIVE`, `STALE`, or `NO DATA`.
 
-Formati numerici:
+Expected display formats include:
 
-- Temperatura: `19.7 °C`.
-- Umidità: `70%`.
-- Batteria: `88.5%`.
-- Tensione solare: `4.295 V`.
-- Corrente solare: `46.903 mA`.
-- Pressione: `1012.18 hPa`.
+| Metric | Example |
+| --- | --- |
+| Temperature | `19.7 C` |
+| Humidity | `70%` |
+| Battery | `88.5%` |
+| Solar voltage | `4.295 V` |
+| Solar current | `46.903 mA` |
+| Pressure | `1012.18 hPa` |
 
-## Topic MQTT
+## Firmware Configuration
 
-Il firmware si aspetta un nodo ESPHome con `topic_prefix`:
+Most project defaults are in `include/AppConfig.h`.
+
+Edit that file when you need to change:
+
+- MQTT client ID.
+- Availability topic.
+- ESPHome sensor topics.
+- Forecast topics.
+- MQTT buffer sizes.
+- Telemetry stale timing.
+- WiFiManager portal name and timeout.
+
+MQTT broker host, port, username, and password are not hardcoded in the firmware.
+They are entered through the WiFiManager setup portal and stored in ESP32 NVS.
+
+## MQTT Topics
+
+The firmware subscribes to ESPHome-style MQTT state topics. The default topic
+constants live in `include/AppConfig.h` and should be adapted to your own
+`topic_prefix`.
+
+Expected shape:
 
 ```text
-esp-c3-meteo-v2
+<topic_prefix>/sensor/18650_battery_level/state
+<topic_prefix>/sensor/outside_temperature/state
+<topic_prefix>/sensor/solar_raw_voltage/state
+<topic_prefix>/sensor/solar_panel_current/state
+<topic_prefix>/sensor/outside_humidity/state
+<topic_prefix>/sensor/absolute_pressure/state
 ```
 
-Topic sottoscritti:
+Forecast values use separate MQTT topics for region, alert, forecast text, low
+summary, and update time. Those constants are also in `include/AppConfig.h`.
 
-```text
-esp-c3-meteo-v2/sensor/18650_battery_level/state
-esp-c3-meteo-v2/sensor/outside_temperature/state
-esp-c3-meteo-v2/sensor/solar_raw_voltage/state
-esp-c3-meteo-v2/sensor/solar_panel_current/state
-esp-c3-meteo-v2/sensor/outside_humidity/state
-esp-c3-meteo-v2/sensor/absolute_pressure/state
+## LIVE, STALE, and NO DATA
+
+The sensor node is expected to wake roughly every 10 minutes.
+
+- `LIVE`: at least one valid value was received, and the latest update is recent.
+- `STALE`: valid values exist, but the latest update is older than the configured stale threshold.
+- `NO DATA`: no valid telemetry has been received since boot.
+
+The default stale threshold is configured to tolerate normal deep-sleep intervals.
+
+## Build and Upload
+
+Requirements:
+
+- PlatformIO installed.
+- ESP32 PlatformIO toolchain installed.
+
+Build:
+
+```bash
+platformio run
 ```
 
-I topic sono definiti in `include/AppConfig.h`.
+Upload:
 
-## Logica LIVE / STALE / NO DATA
+```bash
+platformio run --target upload
+```
 
-Il nodo sensore ESPHome è pensato per svegliarsi circa ogni 10 minuti.
+Upload to an explicit serial port:
 
-- `LIVE`: almeno un valore valido ricevuto e ultimo aggiornamento più recente di 15 minuti.
-- `STALE`: esistono valori validi, ma l'ultimo aggiornamento ha almeno 15 minuti.
-- `NO DATA`: nessun valore valido ricevuto dal boot.
+```bash
+platformio run --target upload --upload-port /dev/ttyUSB1
+```
 
-Il dashboard non marca i dati come obsoleti durante il normale sonno del sensore.
+Serial monitor:
 
-## Configurazione WiFi e MQTT
+```bash
+platformio device monitor
+```
 
-Al primo avvio, o dopo reset credenziali, parte il captive portal WiFiManager:
+Monitor speed is `115200` baud.
+
+If you use a project-local PlatformIO executable, replace `platformio` with your
+local executable path.
+
+## First Boot
+
+On first boot, or after a credential reset, the device starts a WiFiManager
+captive portal:
 
 ```text
 CYD-Dashboard-Setup
 ```
 
-Dal portale si configurano:
+Use the portal to configure:
 
-- rete WiFi;
-- host broker MQTT;
-- porta MQTT;
-- utente MQTT;
-- password MQTT.
+- WiFi network.
+- MQTT broker host.
+- MQTT broker port.
+- MQTT username.
+- MQTT password.
 
-La password non viene mostrata nel dashboard.
+The MQTT password is not shown on the dashboard.
 
-## Touch e Settings
+## Touch and Settings
 
-Il touch resistivo XPT2046 è registrato come input device LVGL.
+The XPT2046 touchscreen is registered as an LVGL input device.
 
-Dal dashboard:
+From the dashboard:
 
-1. Tocca l'ingranaggio in alto a destra.
-2. Si apre la pagina `Settings`.
-3. Da lì puoi tornare indietro o aprire la conferma `Reset WiFi/MQTT`.
-4. `Erase` invia una richiesta alla task di rete, cancella le credenziali e riavvia.
+1. Tap the gear button in the top-right corner.
+2. Open `Settings`.
+3. Use `Flip 180` to toggle display orientation.
+4. Use `Reset WiFi/MQTT` to open the reset confirmation screen.
+5. Confirm with `Erase` to clear saved WiFi and MQTT settings and reboot.
 
-La UI non cancella credenziali direttamente: invia un comando alla `NetworkTask`.
+The UI does not clear credentials directly. It sends a command to `NetworkTask`,
+which owns WiFiManager, MQTT, Preferences, and restart behavior.
 
-## Calibrazione touch
+## Touch Calibration
 
-La calibrazione è in:
+Touch calibration constants are in `include/display/TouchConfig.h`.
 
-```text
-include/display/TouchConfig.h
-```
-
-Valori attuali:
+Current values:
 
 ```cpp
 RawMinX = 289
@@ -152,98 +227,68 @@ MinPressure = 200
 SampleCount = 3
 ```
 
-Per debug:
+For touch debugging, temporarily enable:
 
 ```cpp
 DebugLogTouches = true
 ShowTouchDebugOverlay = true
 ```
 
-Lasciarli `false` durante l'uso normale per evitare log inutili o overlay sul dashboard.
+Leave those values disabled during normal use to avoid noisy serial logs and
+overlay text on the dashboard.
 
-## Architettura
+## Architecture
 
-Il progetto usa due task FreeRTOS separate:
+The firmware keeps networking and UI work in separate FreeRTOS tasks:
 
-- `NetworkTask`, pinned su core 0:
-  - WiFi;
-  - WiFiManager;
-  - MQTT;
-  - parsing dei messaggi MQTT;
-  - reset credenziali;
-  - riavvio.
+| Task | Owns |
+| --- | --- |
+| `NetworkTask` | WiFi, WiFiManager, MQTT, MQTT parsing, credential reset, restart |
+| `UiTask` | TFT, LVGL, touch input, dashboard, settings screens |
 
-- `UiTask`, pinned su core 1:
-  - TFT;
-  - LVGL;
-  - touch;
-  - dashboard e pagina impostazioni.
+Important rules:
 
-Regole importanti:
+- Only `UiTask` calls LVGL APIs.
+- The MQTT callback never calls LVGL.
+- UI code reads snapshots from `AppState`.
+- UI commands for networking actions go through a FreeRTOS queue.
 
-- Solo `UiTask` chiama API LVGL.
-- La callback MQTT non chiama mai LVGL.
-- La UI legge snapshot di `AppState`.
-- I comandi UI verso rete passano da una queue.
-
-## Build
-
-Requisiti:
-
-- PlatformIO installato.
-- Toolchain ESP32 configurata da PlatformIO.
-
-Compilazione:
-
-```bash
-/home/giuseppe/.platformio/penv/bin/platformio run
-```
-
-Upload:
-
-```bash
-/home/giuseppe/.platformio/penv/bin/platformio run --target upload
-```
-
-Upload su porta esplicita, da eseguire manualmente quando la CYD e' su `/dev/ttyUSB1`:
-
-```bash
-/home/giuseppe/.platformio/penv/bin/platformio run --target upload --upload-port /dev/ttyUSB1
-```
-
-Monitor seriale:
-
-```bash
-/home/giuseppe/.platformio/penv/bin/platformio device monitor
-```
-
-Baud rate:
+## Project Layout
 
 ```text
-115200
+platformio.ini                    PlatformIO and TFT_eSPI configuration
+include/AppConfig.h               App constants and MQTT topic defaults
+include/display/DisplayConfig.h   Rotation, inversion, and backlight settings
+include/display/TouchConfig.h     Touch pins and calibration values
+src/tasks/NetworkTask.cpp         WiFi, MQTT, WiFiManager, reset, telemetry parsing
+src/tasks/UiTask.cpp              UI task and LVGL loop
+src/ui/DashboardScreen.cpp        Dashboard, settings, and reset confirmation UI
+src/ui/TouchInput.cpp             LVGL touch driver
+src/ui/LvglPort.cpp               LVGL and TFT porting
 ```
 
-## File principali
+## Troubleshooting
 
-```text
-platformio.ini                    Configurazione PlatformIO e TFT_eSPI
-include/AppConfig.h               Costanti applicative e topic MQTT
-include/display/DisplayConfig.h   Rotazione, inversione, backlight
-include/display/TouchConfig.h     Pin e calibrazione touch
-src/tasks/NetworkTask.cpp         WiFi, MQTT, WiFiManager, reset
-src/tasks/UiTask.cpp              Task UI e loop LVGL
-src/ui/DashboardScreen.cpp        Dashboard, Settings, conferma reset
-src/ui/TouchInput.cpp             Driver touch LVGL
-src/ui/LvglPort.cpp               Porting LVGL/TFT
-```
+- **Display colors are swapped:** change the TFT color order build flag between
+  `TFT_BGR` and `TFT_RGB` in `platformio.ini`.
+- **Touch is offset or inverted:** adjust constants in
+  `include/display/TouchConfig.h`.
+- **No telemetry appears:** confirm the MQTT broker settings in the setup portal
+  and check that the topic constants match your ESPHome `topic_prefix`.
+- **Dashboard stays stale:** verify the sensor node is publishing at the expected
+  interval and adjust `TelemetryStaleAfterMs` if needed.
+- **Credential reset does not start:** use the Settings page reset flow and watch
+  the serial monitor for WiFiManager or MQTT reset messages.
 
-## Note di sicurezza
+## Security Notes
 
-- Non salvare password o token nel codice.
-- Le credenziali MQTT vengono inserite dal portale WiFiManager e salvate in NVS.
-- Il repository contiene solo nomi di variabili, placeholder e topic hardcoded.
-- Prima di pubblicare modifiche, controllare sempre che non ci siano credenziali reali.
+- Do not commit real WiFi passwords, MQTT passwords, tokens, or private keys.
+- WiFi and MQTT credentials are entered through WiFiManager and stored in NVS.
+- The dashboard can show MQTT broker host information, but it does not display
+  the MQTT password.
+- Review `include/AppConfig.h` before publishing changes if your topic names are
+  sensitive.
 
-## Licenza
+## License
 
-Licenza non ancora specificata.
+License not specified yet.
